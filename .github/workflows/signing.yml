@@ -1,0 +1,41 @@
+name: Initialize signing key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  initialize:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Refuse to replace an existing key
+        run: test ! -f .github/signing/release.keystore.gpg
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Generate and encrypt the signing key
+        env:
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          SIGNING_ARCHIVE_PASSWORD: ${{ secrets.SIGNING_ARCHIVE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_STORE_PASSWORD"
+          test -n "$SIGNING_ARCHIVE_PASSWORD"
+          keytool -genkeypair -keystore "$RUNNER_TEMP/release.jks" -storetype JKS \
+            -storepass:env RELEASE_STORE_PASSWORD -keypass:env RELEASE_STORE_PASSWORD \
+            -alias livekit-settings -keyalg RSA -keysize 3072 -validity 10000 \
+            -dname "CN=LiveKit Settings, OU=Android, O=Self-Command"
+          printf '%s' "$SIGNING_ARCHIVE_PASSWORD" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 --cipher-algo AES256 \
+            --symmetric --output release.keystore.gpg "$RUNNER_TEMP/release.jks"
+          rm -f "$RUNNER_TEMP/release.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: encrypted-signing-key
+          path: release.keystore.gpg
+          retention-days: 1
+          if-no-files-found: error
