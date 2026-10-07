@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import androidx.compose.ui.test.*
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -98,6 +99,7 @@ class SettingsScreenTest {
         compose.onNodeWithTag("mode_DIRECT").performClick()
         compose.onNodeWithTag("server_url").performTextInput("wss://test.livekit.cloud")
         compose.onNodeWithTag("connection_token").performTextInput("test-secret-not-a-real-token")
+        compose.onNodeWithTag("connection_token").assert(SemanticsMatcher.keyIsDefined(SemanticsProperties.Password))
         compose.onNodeWithContentDescription("显示 Token").assertExists().performClick()
         compose.onNodeWithContentDescription("隐藏 Token").assertExists().performClick()
         save()
