@@ -13,12 +13,24 @@ android {
         applicationId = "io.livekit.android.example.voiceassistant"
         minSdk = 24
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = providers.environmentVariable("APP_VERSION_CODE").orElse("2").get().toInt()
+        versionName = providers.environmentVariable("APP_VERSION_NAME").orElse("1.1.0").get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+    }
+
+    val releaseKeystore = providers.environmentVariable("RELEASE_KEYSTORE_PATH").orNull
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("cloudRelease") {
+                storeFile = file(releaseKeystore)
+                storePassword = providers.environmentVariable("RELEASE_STORE_PASSWORD").get()
+                keyAlias = "livekit-settings"
+                keyPassword = providers.environmentVariable("RELEASE_STORE_PASSWORD").get()
+            }
         }
     }
 
@@ -27,8 +39,8 @@ android {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
-            // TODO: Create your own release signing config
-            signingConfig = signingConfigs.getByName("debug")
+            // Signing material is supplied only by GitHub Actions.
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("cloudRelease")
         }
     }
     compileOptions {

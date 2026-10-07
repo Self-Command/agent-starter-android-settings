@@ -68,12 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class VoiceAssistantRoute(
-    val tokenServerId: String,
-    val hardcodedUrl: String,
-    val hardcodedToken: String,
-    val homepageAgentEndpoint: String
-)
+object VoiceAssistantRoute
 
 @Composable
 fun VoiceAssistantScreen(

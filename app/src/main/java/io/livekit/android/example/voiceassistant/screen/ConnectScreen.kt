@@ -1,11 +1,10 @@
 package io.livekit.android.example.voiceassistant.screen
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,35 +12,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.LinkAnnotation
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import io.livekit.android.example.voiceassistant.R
-import io.livekit.android.example.voiceassistant.hardcodedToken
-import io.livekit.android.example.voiceassistant.hardcodedUrl
-import io.livekit.android.example.voiceassistant.homepageAgentEndpoint
-import io.livekit.android.example.voiceassistant.tokenServerId
+import io.livekit.android.example.voiceassistant.settings.LiveKitSettingsStore
 import io.livekit.android.example.voiceassistant.ui.theme.Blue500
 import kotlinx.serialization.Serializable
 
@@ -49,91 +37,44 @@ import kotlinx.serialization.Serializable
 object ConnectRoute
 
 @Composable
-fun ConnectScreen(
-    navigateToVoiceAssistant: (VoiceAssistantRoute) -> Unit
-) {
+fun ConnectScreen(navigateToVoiceAssistant: () -> Unit, navigateToSettings: () -> Unit) {
+    val context = LocalContext.current
+    var message by remember { mutableStateOf<String?>(null) }
     Box(
         contentAlignment = Alignment.Center,
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
     ) {
-
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Image(painter = painterResource(R.drawable.connect_icon), contentDescription = "Connect icon")
-
-            Spacer(Modifier.size(16.dp))
+            Spacer(Modifier.size(4.dp))
             Text(
-                text = buildAnnotatedString {
-                    append("Start a call to chat with your voice agent. Need help getting set up?\nCheck out the ")
-                    withLink(
-                        LinkAnnotation.Url(
-                            "https://docs.livekit.io/agents/start/voice-ai/",
-                            TextLinkStyles(style = SpanStyle(textDecoration = TextDecoration.Underline))
-                        )
-                    ) {
-                        append("Voice AI quickstart.")
-                    }
-                },
+                "Start a call to chat with your voice agent.",
                 textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(0.8f)
+                modifier = Modifier.fillMaxWidth(0.8f),
             )
-
-            var hasError by rememberSaveable { mutableStateOf(false) }
-            var isConnecting by remember { mutableStateOf(false) }
-
-            Spacer(Modifier.size(8.dp))
-
-            AnimatedVisibility(hasError) {
-                Text(
-                    text = "Error connecting. Make sure your agent is properly configured and try again.",
-                    color = Color.Red,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(0.8f)
-                )
+            message?.let {
+                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.fillMaxWidth(0.8f))
             }
-
-            Spacer(Modifier.size(24.dp))
-
-            val buttonColors = ButtonDefaults.buttonColors(
-                containerColor = Blue500,
-                contentColor = Color.White
-            )
+            Spacer(Modifier.size(12.dp))
             Button(
-                colors = buttonColors,
+                modifier = Modifier.testTag("start_call"),
+                colors = ButtonDefaults.buttonColors(containerColor = Blue500, contentColor = Color.White),
                 shape = RoundedCornerShape(20),
                 onClick = {
-                    // Token source details from TokenExt.kt
-                    val route = VoiceAssistantRoute(
-                        tokenServerId = tokenServerId,
-                        hardcodedUrl = hardcodedUrl,
-                        hardcodedToken = hardcodedToken,
-                        homepageAgentEndpoint = homepageAgentEndpoint
-                    )
-                    navigateToVoiceAssistant(route)
-                }
-            ) {
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    AnimatedVisibility(isConnecting) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                trackColor = Color.Gray,
-                            )
-                            Spacer(Modifier.size(8.dp))
+                    runCatching { LiveKitSettingsStore(context).load() }
+                        .onSuccess { settings ->
+                            if (settings.validationErrors().isEmpty()) {
+                                message = null
+                                navigateToVoiceAssistant()
+                            } else {
+                                message = "请检查 LiveKit 设置中的连接配置"
+                            }
                         }
-                    }
-                    Text(
-                        text = if (isConnecting) "CONNECTING" else "START CALL",
-                        style = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 2.sp,
-                        )
-                    )
-                }
+                        .onFailure { message = "无法读取已保存的配置，请在 LiveKit 设置中重新保存" }
+                },
+            ) { Text("START CALL") }
+            TextButton(modifier = Modifier.testTag("open_settings"), onClick = navigateToSettings) {
+                Text("LiveKit 设置")
             }
         }
     }

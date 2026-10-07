@@ -1,17 +1,165 @@
-name: Android CI
+name: Android build, test and release
+
 on:
   pull_request:
     branches: [main]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, without v (e.g. 1.1.0)'
+        required: true
+        default: '1.1.0'
+      publish:
+        description: 'Publish to GitHub Releases after all checks pass'
+        type: boolean
+        default: true
+
 permissions:
   contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  check:
+  verify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    env:
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      SIGNING_ARCHIVE_PASSWORD: ${{ secrets.SIGNING_ARCHIVE_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
+      - name: Resolve version and publish conditions
+        id: version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          REQUESTED_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          publish=false
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+            publish=true
+          else
+            version="${REQUESTED_VERSION:-1.1.0}"
+            if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$REQUESTED_PUBLISH" = true ]; then
+              test "$GITHUB_REF" = refs/heads/main
+              publish=true
+            fi
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "APP_VERSION_NAME=$version" >> "$GITHUB_ENV"
+          echo "APP_VERSION_CODE=$((GITHUB_RUN_NUMBER + 1))" >> "$GITHUB_ENV"
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - run: chmod +x gradlew
-      - run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --no-daemon
+      - uses: android-actions/setup-android@v3
+      - name: Install SDK 36
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@v5
+      - name: Restore the fixed signing key
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          test -n "$RELEASE_STORE_PASSWORD"
+          test -n "$SIGNING_ARCHIVE_PASSWORD"
+          printf '%s' "$SIGNING_ARCHIVE_PASSWORD" | gpg --batch --yes \
+            --pinentry-mode loopback --passphrase-fd 0 \
+            --output "$RUNNER_TEMP/release.jks" --decrypt .github/signing/release.keystore.gpg
+          echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Unit tests, Lint and test APKs
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+      - name: Build and verify the release APK
+        if: github.event_name != 'pull_request'
+        run: |
+          ./gradlew :app:assembleRelease --no-daemon
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
+      - name: Enable KVM
+        run: |
+          sudo chmod 666 /dev/kvm
+      - name: Emulator UI tests and signed APK smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        env:
+          RUN_RELEASE_SMOKE: ${{ github.event_name != 'pull_request' }}
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            ./gradlew :app:connectedDebugAndroidTest --no-daemon
+            mkdir -p app/build/cloud-smoke
+            adb pull /sdcard/Android/data/io.livekit.android.example.voiceassistant/files/test-screenshots app/build/cloud-smoke/instrumentation-screenshots || true
+            if [ "$RUN_RELEASE_SMOKE" = true ]; then adb uninstall io.livekit.android.example.voiceassistant; fi
+            if [ "$RUN_RELEASE_SMOKE" = true ]; then adb install app/build/outputs/apk/release/app-release.apk; fi
+            if [ "$RUN_RELEASE_SMOKE" = true ]; then adb logcat -c; python .github/scripts/release-smoke.py; fi
+      - name: Prepare release assets
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p release-assets
+          cp app/build/outputs/apk/release/app-release.apk "release-assets/livekit-settings-${APP_VERSION_NAME}.apk"
+          cd release-assets
+          sha256sum "livekit-settings-${APP_VERSION_NAME}.apk" > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: success() && github.event_name != 'pull_request'
+        with:
+          name: release-assets
+          path: release-assets/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports-and-screenshots
+          path: |
+            app/build/reports/
+            app/build/outputs/androidTest-results/
+            app/build/cloud-smoke/
+          if-no-files-found: warn
+      - name: Remove plaintext signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+
+  release:
+    needs: verify
+    if: needs.verify.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Publish verified APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/release-notes.md" <<'NOTES'
+          ## LiveKit 连接配置移植
+          - 首页增加 LiveKit 设置入口，安装后可保存和修改一组连接配置。
+          - 支持开发 Token 服务、服务器地址 + Token、Token 接口三种方式。
+          - Android Keystore 加密保存，Token 默认隐藏。
+          - 不包含多账号、额度检测或 STT/LLM/TTS 配置。
+
+          ### 云端验证
+          单元测试、Android Lint、API 35 模拟器界面测试、签名检查及最终 APK 安装/启动/进程重启验证均通过。
+          测试使用虚构配置，真实语音连通性需安装后填写有效配置验证。
+          NOTES
+          gh release create "v$RELEASE_VERSION" release-assets/* --target "$GITHUB_SHA" \
+            --title "LiveKit Settings v$RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --verify-tag=false
