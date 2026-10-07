@@ -48,11 +48,11 @@ async def main():
     def on_transcription(segments, participant, publication):
         for segment in segments:
             if segment.final:
-                state["transcripts"].append({"text": segment.text, "source": "transcription_event"})
+                state["transcripts"].append({"text": segment.text, "source": "transcription_event", "identity": participant.identity if participant else None})
 
     async def read_text(reader, identity):
         text = await reader.read_all()
-        state["transcripts"].append({"text": text, "source": "text_stream"})
+        state["transcripts"].append({"text": text, "source": "text_stream", "identity": identity})
 
     def on_text(reader, identity):
         spawn(read_text(reader, identity))
@@ -96,7 +96,8 @@ async def main():
                 and "settings" in combined_transcript.lower()
                 and any("\u4e00" <= character <= "\u9fff" for character in combined_transcript)
             )
-            if state["audio_samples"] - before_audio >= 12000 and bilingual_text:
+            agent_reply = any(item["source"] == "transcription_event" and item.get("identity") in state["remote_participants"] for item in new_texts)
+            if state["audio_samples"] - before_audio >= 12000 and bilingual_text and agent_reply:
                 state["stage"] = "passed"
                 state["success"] = True
                 print("Real RTC check passed: agent joined, synthetic bilingual speech transcribed, spoken reply received.")
