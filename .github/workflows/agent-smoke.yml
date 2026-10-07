@@ -1,0 +1,30 @@
+name: Cloud voice agent integration check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rtc-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install the RTC client in the cloud
+        run: pip install livekit==1.1.20
+      - name: Test the deployed agent with synthetic bilingual speech
+        env:
+          LIVEKIT_SMOKE_URL: ${{ secrets.LIVEKIT_SMOKE_URL }}
+          LIVEKIT_SMOKE_TOKEN: ${{ secrets.LIVEKIT_SMOKE_TOKEN }}
+        run: python .github/scripts/agent-smoke.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cloud-agent-integration-report
+          path: cloud-agent-report.json
+          if-no-files-found: warn
