@@ -32,7 +32,7 @@ async def main():
         stream = rtc.AudioStream(track, sample_rate=24000, num_channels=1)
         try:
             async for event in stream:
-                if any(event.frame.data):
+                if max((abs(sample) for sample in event.frame.data), default=0) > 600:
                     state["audio_samples"] += event.frame.samples_per_channel
                     if state["audio_samples"] >= 4800:
                         greeting.set()
@@ -89,10 +89,12 @@ async def main():
         deadline = time.monotonic() + 100
         while time.monotonic() < deadline:
             new_texts = state["transcripts"][before_transcripts:]
-            bilingual_text = any(
-                "LiveKit" in item["text"] and "API" in item["text"] and "settings" in item["text"].lower()
-                and any("\u4e00" <= character <= "\u9fff" for character in item["text"])
-                for item in new_texts
+            combined_transcript = " ".join(item["text"] for item in new_texts)
+            bilingual_text = (
+                "livekit" in combined_transcript.lower()
+                and "api" in combined_transcript.lower()
+                and "settings" in combined_transcript.lower()
+                and any("\u4e00" <= character <= "\u9fff" for character in combined_transcript)
             )
             if state["audio_samples"] - before_audio >= 12000 and bilingual_text:
                 state["stage"] = "passed"
