@@ -113,7 +113,7 @@ async def main():
         while time.monotonic() < deadline:
             new_texts = state["transcripts"][before_transcripts:]
             user_texts = [item for item in new_texts if item.get("identity") == room.local_participant.identity]
-            finals = [item for item in user_texts if item["final"]]
+            finals = [item for item in user_texts if item["final"] and item["source"] == "transcription_event"]
             combined = " ".join(item["text"] for item in finals)
             bilingual_text = ("livekit" in combined.lower() and "api" in combined.lower()
                 and "settings" in combined.lower() and any("\u4e00" <= c <= "\u9fff" for c in combined))
