@@ -2,7 +2,6 @@ package io.livekit.android.example.voiceassistant
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
-import com.sun.net.httpserver.HttpServer
 import io.livekit.android.example.voiceassistant.settings.*
 import io.livekit.android.token.ConfigurableTokenSource
 import io.livekit.android.token.FixedTokenSource
@@ -11,9 +10,10 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
-import java.net.InetSocketAddress
+import java.net.ServerSocket
+import java.util.concurrent.Executors
 import java.nio.file.Files
-import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.concurrent.atomic.AtomicReference
 
 /** Calls the production App factory and the actual SDK HTTP implementation on the JVM. */
@@ -32,25 +32,46 @@ class ConnectionRequestTest {
 
     @Test fun appEndpointUsesSdkPostProtocolAndReturnsServerCredentials() = runBlocking {
         val received = AtomicReference<JsonObject>()
-        val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        server.createContext("/token") { exchange ->
-            assertEquals("POST", exchange.requestMethod)
-            assertEquals("application/json", exchange.requestHeaders.getFirst("Content-Type"))
-            received.set(JsonParser.parseString(exchange.requestBody.bufferedReader().readText()).asJsonObject)
-            val body = """{"server_url":"wss://chosen.livekit.cloud","participant_token":"fictional-token"}""".toByteArray()
-            exchange.sendResponseHeaders(200, body.size.toLong())
-            exchange.responseBody.use { it.write(body) }
-            exchange.close()
+        val server = ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+        val executor = Executors.newSingleThreadExecutor()
+        val serving = executor.submit {
+            server.accept().use { socket ->
+                socket.soTimeout = 5000
+                val reader = socket.getInputStream().bufferedReader()
+                assertEquals("POST /token HTTP/1.1", reader.readLine())
+                val headers = mutableMapOf<String, String>()
+                var line = reader.readLine()
+                while (!line.isNullOrEmpty()) {
+                    headers[line.substringBefore(':').lowercase()] = line.substringAfter(':').trim()
+                    line = reader.readLine()
+                }
+                assertEquals("application/json", headers["content-type"])
+                val content = CharArray(headers.getValue("content-length").toInt())
+                var offset = 0
+                while (offset < content.size) {
+                    val n = reader.read(content, offset, content.size - offset)
+                    require(n > 0)
+                    offset += n
+                }
+                received.set(JsonParser.parseString(String(content)).asJsonObject)
+                val body = """{"server_url":"wss://chosen.livekit.cloud","participant_token":"fictional-token"}""".toByteArray()
+                socket.getOutputStream().apply {
+                    write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray())
+                    write(body)
+                    flush()
+                }
+            }
         }
-        server.start()
         try {
-            val source = LiveKitSettings(tokenEndpoint = "http://127.0.0.1:${server.address.port}/token").createTokenSource()
+            val source = LiveKitSettings(tokenEndpoint = "http://127.0.0.1:${server.localPort}/token").createTokenSource()
             val response = (source as ConfigurableTokenSource).fetch(TokenRequestOptions(roomName = "fictional-room", participantIdentity = "fictional-user")).getOrThrow()
             assertEquals("wss://chosen.livekit.cloud", response.serverUrl)
             assertEquals("fictional-token", response.participantToken)
             assertEquals("fictional-room", received.get()["room_name"].asString)
             assertEquals("fictional-user", received.get()["participant_identity"].asString)
-        } finally { server.stop(0) }
+            serving.get(5, java.util.concurrent.TimeUnit.SECONDS)
+            Unit
+        } finally { server.close(); executor.shutdownNow() }
     }
 
     @Test fun invalidConfigurationNeverCreatesADemoRequest() {
@@ -79,17 +100,17 @@ class ConnectionRequestTest {
             addProperty("url", response.serverUrl)
             addProperty("token", response.participantToken)
         }
-        val target = Path.of(System.getenv("RESOLVED_CONNECTION_FILE"))
-        Files.writeString(target, resolved.toString())
+        val target = Paths.get(System.getenv("RESOLVED_CONNECTION_FILE"))
+        Files.write(target, resolved.toString().toByteArray())
         Files.setPosixFilePermissions(target, setOf(java.nio.file.attribute.PosixFilePermission.OWNER_READ, java.nio.file.attribute.PosixFilePermission.OWNER_WRITE))
         val report = JsonObject().apply {
             addProperty("implementation", "production App createTokenSource and LiveKit Android SDK 2.28.0")
             addProperty("mode", mode.name)
             addProperty("resolution_ms", (System.nanoTime() - start) / 1_000_000)
         }
-        val reportPath = Path.of("build/reports/connection-request.json")
+        val reportPath = Paths.get("build/reports/connection-request.json")
         Files.createDirectories(reportPath.parent)
-        Files.writeString(reportPath, report.toString())
+        Files.write(reportPath, report.toString().toByteArray())
         Unit
     }
 }
