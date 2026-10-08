@@ -42,11 +42,11 @@ async def events(response):
             yield json.loads(data)
 
 
-async def http_case(client, provider, name, body, audio=False):
+async def http_case(client, provider, name, body, audio=False, endpoint='/chat/completions'):
     start = time.monotonic()
     result = {'case': name, 'first_usable_ms': None, 'chunks': 0}
     try:
-        async with client.post(provider['base_url'].rstrip('/') + '/chat/completions',
+        async with client.post(provider['base_url'].rstrip('/') + endpoint,
                                headers={'Authorization': 'Bearer ' + provider['api_key']},
                                json=body) as response:
             result['status'] = response.status
@@ -57,6 +57,15 @@ async def http_case(client, provider, name, body, audio=False):
                 async for event in events(response):
                     if event.get('error'):
                         raise ValueError('Provider stream returned an error')
+                    if endpoint == '/responses':
+                        if event.get('type') in ('response.failed', 'response.incomplete', 'error'):
+                            raise ValueError('Responses request did not complete')
+                        if event.get('type') == 'response.output_text.delta' and event.get('delta'):
+                            result['characters'] = result.get('characters', 0) + len(event['delta'])
+                            result['chunks'] += 1
+                            if result['first_usable_ms'] is None:
+                                result['first_usable_ms'] = round((time.monotonic() - start) * 1000)
+                        continue
                     for choice in event.get('choices', []):
                         delta = choice.get('delta') or {}
                         content = (delta.get('audio') or {}).get('data') if audio else delta.get('content')
@@ -100,6 +109,13 @@ async def provider_controls(config):
                         'messages': [{'role': 'system', 'content': VOICE_CONTEXT},
                                      {'role': 'user', 'content': QUESTION}]}
                 results.append(await http_case(client, config['llm'], 'llm_voice_context_' + str(i + 1), body))
+            # Compare the gateway's native Responses path without changing the deployed model.
+            for i in range(2):
+                body = {'model': config['llm']['model'], 'stream': True, 'store': False,
+                        'reasoning': {'effort': 'none'}, 'max_output_tokens': 256,
+                        'instructions': VOICE_CONTEXT,
+                        'input': [{'role': 'user', 'content': QUESTION}]}
+                results.append(await http_case(client, config['llm'], 'llm_responses_' + str(i + 1), body, endpoint='/responses'))
             return results
 
         async def tts_cases():
@@ -238,7 +254,7 @@ async def conversation(connection, count):
                 chunk = framed[offset:offset + 960]
                 await source.capture_frame(rtc.AudioFrame(data=chunk, sample_rate=24000, num_channels=1, samples_per_channel=len(chunk) // 2))
             await source.wait_for_playout()
-            deadline = now() + 35
+            deadline = now() + 45
             while now() < deadline:
                 incoming = texts[before:]
                 user = [item for item in incoming if item['identity'] == room.local_participant.identity]
@@ -257,6 +273,9 @@ async def conversation(connection, count):
                     current['reply_audio_after_end_s'] = round(current['first_reply_audio_s'] - current['speech_end_s'], 3)
                 agent_final = any(item['final'] and item['identity'] != room.local_participant.identity for item in incoming)
                 agents_listening = any(p.attributes.get('lk.agent.state') == 'listening' for p in room.remote_participants.values())
+                current['agent_final_received'] = agent_final
+                current['agent_listening'] = agents_listening
+                current['reply_active_audio_samples'] = audio_samples - before_audio
                 complete = agent_final and agents_listening and now() - last_audio > 0.8 and audio_samples - before_audio >= 12000
                 current['bilingual_recognition_pass'] = bilingual
                 current['spoken_reply_pass'] = complete
