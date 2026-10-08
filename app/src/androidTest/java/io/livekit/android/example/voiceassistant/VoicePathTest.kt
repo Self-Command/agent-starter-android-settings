@@ -220,11 +220,11 @@ class VoicePathTest {
         turn(1)
         // Reproduce toggling the microphone, a separate publish/mute failure path.
         compose.onNodeWithContentDescription("Toggle Microphone").performClick()
-        await("microphone muted") { lastDetail("microphone_applied") == "false" }
+        await("microphone muted") { lastDetail("microphone_state") == "false" }
         SystemClock.sleep(700)
         record("microphone_reenable_clicked")
         compose.onNodeWithContentDescription("Toggle Microphone").performClick()
-        await("microphone re-enabled", 45000) { lastDetail("microphone_applied") == "true" }
+        await("microphone re-enabled", 45000) { lastDetail("microphone_state") == "true" }
         turn(2)
         compose.onNodeWithContentDescription("End Call").performClick()
         compose.onNodeWithTag("start_call").assertExists()

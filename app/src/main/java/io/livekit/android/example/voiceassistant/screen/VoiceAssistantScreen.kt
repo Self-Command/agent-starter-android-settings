@@ -145,6 +145,10 @@ fun VoiceAssistant(
         val isCameraEnabled by localMedia::isCameraEnabled
         val isScreenShareEnabled by localMedia::isScreenShareEnabled
 
+        LaunchedEffect(isMicEnabled) {
+            VoiceSessionProbe.record("microphone_state", isMicEnabled.toString())
+        }
+
         LaunchedEffect(canEnableMic, requestedAudio) {
             session.waitUntilConnected()
             VoiceSessionProbe.record("microphone_request", (canEnableMic && requestedAudio).toString())
