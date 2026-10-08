@@ -4,10 +4,12 @@ import base64
 import importlib.util
 import json
 import os
+import socket
 import struct
 import time
 import wave
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import aiohttp
 from livekit import rtc
@@ -15,6 +17,22 @@ from livekit import rtc
 spec = importlib.util.spec_from_file_location('voice_probe', Path(__file__).with_name('request-voice-test.py'))
 probe = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(probe)
+
+
+def stun_probe(url):
+    host = urlsplit(url).hostname
+    transaction = os.urandom(12)
+    packet = struct.pack('!HHI', 1, 0, 0x2112a442) + transaction
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as connection:
+        connection.settimeout(3)
+        start = time.monotonic()
+        try:
+            connection.sendto(packet, (host, 443))
+            data, _ = connection.recvfrom(2048)
+            return {'udp_port': 443, 'binding_response': data[:2] == b'\x01\x01' and data[8:20] == transaction,
+                    'rtt_ms': round((time.monotonic() - start) * 1000)}
+        except Exception as error:
+            return {'udp_port': 443, 'error_type': type(error).__name__}
 
 
 async def fixture(client, provider, name, text):
@@ -161,6 +179,8 @@ async def main():
     connection = json.loads(Path(os.environ['RESOLVED_CONNECTION_FILE']).read_text())
     for secret in (connection['token'], config['token_endpoint'], config['tts']['api_key']):
         print('::add-mask::' + secret)
+    udp = await asyncio.to_thread(stun_probe, connection['url'])
+    probe.OUT.joinpath('udp-preflight.json').write_text(json.dumps(udp), encoding='utf-8')
     async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=45)) as client:
         chinese = await fixture(client, config['tts'], 'chinese', '请用一句话告诉我，语音助手连接正常吗？')
         english = await fixture(client, config['tts'], 'english', 'Please say that the voice connection is working.')
