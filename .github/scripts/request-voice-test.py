@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import os
+import re
 import statistics
 import struct
 import time
@@ -305,7 +306,8 @@ async def conversation(connection, count, samples=None):
                 if not finals:
                     finals = [item for item in user if item['final']]
                 combined = ' '.join(item['text'] for item in finals)
-                bilingual = (all(term.lower() in combined.lower() for term in sample['terms'])
+                normalized = re.sub(r'[\s\-]+', '', combined.lower())
+                bilingual = (all(re.sub(r'[\s\-]+', '', term.lower()) in normalized for term in sample['terms'])
                              and (not sample.get('chinese') or any('\u4e00' <= c <= '\u9fff' for c in combined)))
                 if user:
                     current['first_transcript_s'] = round(min(item['received_s'] for item in user) - current['speech_start_s'], 3)
