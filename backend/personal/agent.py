@@ -35,7 +35,7 @@ class Assistant(Agent):
 
 
 server = AgentServer(num_idle_processes=1, host="127.0.0.1", port=8081,
-                     job_memory_warn_mb=700, job_memory_limit_mb=900)
+                     job_memory_warn_mb=700, job_memory_limit_mb=900, log_level="warning")
 server.load_fnc = lambda worker: min(float(len(worker.active_jobs)), 1.0)
 
 
@@ -56,6 +56,7 @@ async def entrypoint(ctx: agents.JobContext):
             model=os.getenv("LLM_MODEL", "gpt-5.6-luna"),
             base_url=os.environ["LLM_BASE_URL"],
             api_key=os.environ["LLM_API_KEY"],
+            reasoning_effort="none",
             max_completion_tokens=256,
         ),
         tts=tts.StreamAdapter(

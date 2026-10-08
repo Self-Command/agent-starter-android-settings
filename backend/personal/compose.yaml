@@ -1,0 +1,63 @@
+name: livekit-personal
+x-logs: &logs
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+services:
+  redis:
+    image: ${REDIS_IMAGE:?set pinned Redis digest}
+    network_mode: host
+    command: ['redis-server', '/config/redis.conf']
+    volumes: ['./private/redis.conf:/config/redis.conf:ro']
+    mem_limit: 64m
+    cpus: 0.1
+    restart: unless-stopped
+    logging: *logs
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-p', '6380', 'ping']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+  livekit:
+    image: ${LIVEKIT_IMAGE:?set pinned LiveKit digest}
+    network_mode: host
+    command: ['--config', '/config/livekit.yaml']
+    volumes: ['./private/livekit.yaml:/config/livekit.yaml:ro']
+    mem_limit: 256m
+    cpus: 0.5
+    depends_on:
+      redis: {condition: service_healthy}
+    restart: unless-stopped
+    logging: *logs
+  agent:
+    image: ${AGENT_IMAGE:?set tested Agent digest}
+    network_mode: host
+    env_file: ['./private/agent.env']
+    mem_limit: 1280m
+    cpus: 1.5
+    depends_on: [livekit]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    logging: *logs
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8081/", timeout=2)']
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 60s
+  token:
+    image: ${AGENT_IMAGE:?set tested Agent digest}
+    network_mode: host
+    command: ['python', 'token_server.py']
+    env_file: ['./private/token.env']
+    mem_limit: 128m
+    cpus: 0.2
+    depends_on: [livekit]
+    restart: unless-stopped
+    logging: *logs
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8082/health", timeout=2)']
+      interval: 15s
+      timeout: 3s
+      retries: 5

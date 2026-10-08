@@ -13,6 +13,7 @@ from pathlib import Path
 
 import aiohttp
 from livekit import rtc
+from google.protobuf.json_format import MessageToDict
 
 logging.basicConfig(level=logging.ERROR)
 OUT = Path('voice-reports')
@@ -147,7 +148,47 @@ async def provider_controls(config):
         return report
 
 
-async def conversation(connection, count):
+async def transport_snapshot(room):
+    """Export selected ICE transport and numeric RTP stats, without URLs or credentials."""
+    result = {}
+    stats = await room.get_rtc_stats()
+    for direction in ('publisher', 'subscriber'):
+        records = [MessageToDict(item, preserving_proto_field_name=True)
+                   for item in getattr(stats, direction + '_stats')]
+        nodes = []
+
+        def visit(value):
+            if isinstance(value, dict):
+                if 'rtc' in value:
+                    nodes.append(value)
+                for child in value.values():
+                    visit(child)
+            elif isinstance(value, list):
+                for child in value:
+                    visit(child)
+
+        visit(records)
+        by_id = {node['rtc'].get('id'): node for node in nodes}
+        selected = []
+        for node in nodes:
+            pair_id = node.get('transport', {}).get('selected_candidate_pair_id')
+            if not pair_id:
+                continue
+            pair = by_id.get(pair_id, {}).get('candidate_pair', {})
+            entry = {'rtt_s': pair.get('current_round_trip_time')}
+            for side in ('local', 'remote'):
+                candidate = by_id.get(pair.get(side + '_candidate_id'), {}).get('candidate', {})
+                entry[side] = {key: candidate[key] for key in ('protocol', 'candidate_type', 'relay_protocol')
+                               if key in candidate}
+            selected.append(entry)
+        incoming = [node['received'] for node in nodes if 'received' in node]
+        result[direction] = {'selected_pairs': selected,
+                             'rtp': [{key: item[key] for key in ('packets_received', 'packets_lost', 'jitter')
+                                      if key in item} for item in incoming]}
+    return result
+
+
+async def conversation(connection, count, samples=None):
     room = rtc.Room()
     start = time.monotonic()
     now = lambda: time.monotonic() - start
@@ -232,18 +273,20 @@ async def conversation(connection, count):
             if now() > deadline:
                 raise TimeoutError('Greeting did not finish')
             await asyncio.sleep(0.1)
-        with wave.open(str(SAMPLE), 'rb') as wav:
-            assert (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) == (24000, 1, 2)
-            pcm = wav.readframes(wav.getnframes())
-        active = [i for i, (value,) in enumerate(struct.iter_unpack('<h', pcm)) if abs(value) > 600]
-        if not active:
-            raise ValueError('Synthetic speech is silent')
-        framed = b'\0' * 24000 + pcm + b'\0' * 72000
         for turn in range(count):
+            sample = samples[turn % len(samples)] if samples else {
+                'path': SAMPLE, 'name': 'Chinese-English', 'terms': ['livekit', 'api', 'settings'], 'chinese': True}
+            with wave.open(str(sample['path']), 'rb') as wav:
+                assert (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) == (24000, 1, 2)
+                pcm = wav.readframes(wav.getnframes())
+            active = [i for i, (value,) in enumerate(struct.iter_unpack('<h', pcm)) if abs(value) > 600]
+            if not active:
+                raise ValueError('Synthetic speech is silent')
+            framed = b'\0' * 24000 + pcm + b'\0' * 72000
             before = len(texts)
             before_audio = audio_samples
             base = now()
-            current = {'turn': turn + 1, 'speech_start_s': base + 0.5 + active[0] / 24000,
+            current = {'turn': turn + 1, 'scenario': sample['name'], 'speech_start_s': base + 0.5 + active[0] / 24000,
                        'speech_end_s': base + 0.5 + (active[-1] + 1) / 24000,
                        'max_input_pacing_lag_s': 0.0}
             turns.append(current)
@@ -262,8 +305,8 @@ async def conversation(connection, count):
                 if not finals:
                     finals = [item for item in user if item['final']]
                 combined = ' '.join(item['text'] for item in finals)
-                bilingual = ('livekit' in combined.lower() and 'api' in combined.lower() and 'settings' in combined.lower()
-                             and any('\u4e00' <= c <= '\u9fff' for c in combined))
+                bilingual = (all(term.lower() in combined.lower() for term in sample['terms'])
+                             and (not sample.get('chinese') or any('\u4e00' <= c <= '\u9fff' for c in combined)))
                 if user:
                     current['first_transcript_s'] = round(min(item['received_s'] for item in user) - current['speech_start_s'], 3)
                 if finals:
@@ -285,6 +328,7 @@ async def conversation(connection, count):
             else:
                 raise TimeoutError('A complete bilingual conversational turn was not received')
             current['max_input_pacing_lag_s'] = round(current['max_input_pacing_lag_s'], 4)
+            current['transport'] = await transport_snapshot(room)
             current = None
         report['functional_pass'] = all(t['bilingual_recognition_pass'] and t['spoken_reply_pass'] for t in turns)
         delays = [t['reply_audio_after_end_s'] for t in turns]
