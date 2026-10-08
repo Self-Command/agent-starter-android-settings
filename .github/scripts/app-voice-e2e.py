@@ -54,6 +54,9 @@ def main():
     secret_values = [config["token"], config["llm"]["api_key"], config["tts"]["api_key"]]
     for secret in secret_values:
         print(f"::add-mask::{secret}", flush=True)
+    # A boot-time Pixel Launcher ANR must not cover or pause the app under test.
+    adb("shell", "am", "force-stop", "com.google.android.apps.nexuslauncher")
+    adb("shell", "pm", "disable-user", "--user", "0", "com.google.android.apps.nexuslauncher")
     adb("install", "-r", "app/build/outputs/apk/debug/app-debug.apk")
     adb("install", "-r", "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk")
     print("App and test APKs installed", flush=True)

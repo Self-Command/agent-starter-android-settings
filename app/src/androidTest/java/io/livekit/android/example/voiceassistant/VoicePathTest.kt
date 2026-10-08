@@ -194,9 +194,20 @@ class VoicePathTest {
         try {
             compose.onNodeWithTag("open_settings").performClick()
             compose.onNodeWithTag("mode_DIRECT").performClick()
+            compose.waitForIdle()
             compose.onNodeWithTag("server_url").performTextReplacement(config.getString("url"))
+            compose.waitForIdle()
             compose.onNodeWithTag("connection_token").performTextReplacement(config.getString("token"))
+            compose.waitForIdle()
             compose.onNodeWithTag("save_settings").performScrollTo().performClick()
+            await("configuration persisted", 20000) {
+                val saved = LiveKitSettingsStore(context).load()
+                saved.serverUrl == config.getString("url") && saved.token == config.getString("token")
+            }
+            await("returned to home", 20000) {
+                compose.onAllNodesWithTag("save_settings").fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()
+            }
+            compose.onNodeWithTag("start_call").assertIsDisplayed()
         } catch (_: Throwable) {
             throw AssertionError("Could not save runtime connection configuration")
         }
@@ -205,6 +216,7 @@ class VoicePathTest {
         File(directory, "video.ready").writeText("ready")
         compose.onNodeWithTag("start_call").performClick()
         record("start_call_clicked")
+        await("voice screen ViewModel created", 20000) { room != null }
         await("RTC connected and microphone published") {
             val current = room
             val track = current?.localParticipant?.getTrackPublication(Track.Source.MICROPHONE)?.track
