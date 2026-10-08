@@ -79,36 +79,15 @@ jobs:
             --pinentry-mode loopback --passphrase-fd 0 \
             --output "$RUNNER_TEMP/release.jks" --decrypt .github/signing/release.keystore.gpg
           echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
-      - name: Unit tests, Lint and test APKs
+      - name: Unit tests and Lint (no emulator)
         run: |
           chmod +x gradlew
-          ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+          ./gradlew :app:testDebugUnitTest :app:lintDebug :app:lintRelease --no-daemon
       - name: Build and verify the release APK
         if: github.event_name != 'pull_request'
         run: |
           ./gradlew :app:assembleRelease --no-daemon
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs app/build/outputs/apk/release/app-release.apk
-      - name: Enable KVM
-        run: |
-          sudo chmod 666 /dev/kvm
-      - name: Emulator UI tests and signed APK smoke test
-        uses: reactivecircus/android-emulator-runner@v2
-        env:
-          RUN_RELEASE_SMOKE: ${{ github.event_name != 'pull_request' }}
-        with:
-          api-level: 35
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-          script: |
-            ./gradlew :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true --no-daemon
-            mkdir -p app/build/cloud-smoke
-            adb pull /sdcard/Android/data/io.livekit.android.example.voiceassistant/files/test-screenshots app/build/cloud-smoke/instrumentation-screenshots || true
-            if [ "$RUN_RELEASE_SMOKE" = true ]; then adb uninstall io.livekit.android.example.voiceassistant; fi
-            if [ "$RUN_RELEASE_SMOKE" = true ]; then adb install app/build/outputs/apk/release/app-release.apk; fi
-            if [ "$RUN_RELEASE_SMOKE" = true ]; then adb logcat -c; python .github/scripts/release-smoke.py; fi
       - name: Prepare release assets
         if: github.event_name != 'pull_request'
         run: |
@@ -125,11 +104,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-reports-and-screenshots
+          name: test-reports
           path: |
             app/build/reports/
-            app/build/outputs/androidTest-results/
-            app/build/cloud-smoke/
           if-no-files-found: warn
       - name: Remove plaintext signing key
         if: always()
@@ -161,8 +138,8 @@ jobs:
           - 不包含多账号、额度检测或 STT/LLM/TTS 配置。
 
           ### 云端验证
-          单元测试、Android Lint、API 35 模拟器界面测试、签名检查及最终 APK 安装/启动/进程重启验证均通过。
-          测试使用虚构配置，真实语音连通性需安装后填写有效配置验证。
+          单元测试、Android Lint、Release APK 构建和签名检查通过。
+          按当前要求不运行模拟器或界面测试；安装、启动和真实手机通话需用户验证。
           NOTES
           gh release create "v$RELEASE_VERSION" release-assets/* --target "$GITHUB_SHA" \
             --title "LiveKit Settings v$RELEASE_VERSION" --notes-file "$RUNNER_TEMP/release-notes.md" --verify-tag=false

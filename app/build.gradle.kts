@@ -97,3 +97,11 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
 }
+
+// A live diagnostic must resolve this run's short-lived credentials, even with CI caching.
+tasks.withType<Test>().configureEach {
+    if (providers.environmentVariable("VOICE_TEST_CONFIG").isPresent) {
+        outputs.upToDateWhen { false }
+        outputs.cacheIf { false }
+    }
+}

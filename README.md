@@ -29,12 +29,16 @@ Token 默认隐藏，不通过导航或日志传递。取消编辑保留原配�
 
 在 GitHub Actions 运行 **Android build, test and release**：
 
-- PR：单元测试、Lint、API 35 模拟器设置页测试，不发布。
+- PR：单元测试、Lint，不发布；按当前要求已撤掉模拟器和 UI 测试。
 - 手动运行：输入版本号，选择是否发布；发布只能从 `main` 触发。
 - 推送 `v*` 版本标签：执行完整检查并发布。
 
-通过测试后发布固定签名的 Release APK、SHA-256 和更新说明。测试报告、设备日志和截图保存为 Actions artifacts。
+通过测试后发布固定签名的 Release APK、SHA-256 和更新说明。测试报告保存为 Actions artifacts。
 自动测试使用虚构连接参数，不验证真实账号的语音连通性。
+
+语音延迟诊断使用独立的 **Fast App requests and voice latency**，测试实际 App 的
+Token 请求代码，再用合成语音测服务链路，未达实时指标会失败并保留报告。
+详见 [.github/test-audio/APP-VOICE-TEST.md](.github/test-audio/APP-VOICE-TEST.md)。
 
 ## 固定签名
 
@@ -45,7 +49,8 @@ Token 默认隐藏，不通过导航或日志传递。取消编辑保留原配�
 - `RELEASE_STORE_PASSWORD`：签名库和签名密钥的密码。
 
 后续版本复用同一签名，不能重新生成或覆盖现有签名文件。妥善保存加密文件和密码，丢失后无法为已安装版本发布覆盖更新。
-真实 LiveKit 配置不应放进源码或 Actions Secrets；在安装后的设置页填写。
+日常使用的 LiveKit 配置在安装后的设置页填写，不放进源码。
+获授权的诊断凭据只放 Actions Secrets，诊断房间 Token 使用短有效期。
 
 ## 项目来源
 
