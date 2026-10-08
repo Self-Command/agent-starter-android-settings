@@ -35,7 +35,7 @@ class Assistant(Agent):
 
 
 server = AgentServer(num_idle_processes=1, host="127.0.0.1", port=8081,
-                     job_memory_warn_mb=700, job_memory_limit_mb=900, log_level="warning")
+                     job_memory_warn_mb=700, job_memory_limit_mb=900, log_level="WARN")
 server.load_fnc = lambda worker: min(float(len(worker.active_jobs)), 1.0)
 
 
