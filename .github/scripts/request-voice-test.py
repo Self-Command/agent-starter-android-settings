@@ -156,7 +156,10 @@ async def conversation(connection, count):
                     audio_samples += event.frame.samples_per_channel
                     greeting.set()
                     if current is not None and now() >= current['speech_start_s']:
-                        current.setdefault('first_reply_audio_s', now())
+                        if now() < current['speech_end_s'] - 0.2:
+                            current['premature_reply_audio'] = True
+                        elif now() >= current['speech_end_s']:
+                            current.setdefault('first_reply_audio_s', now())
         finally:
             await stream.aclose()
 
@@ -270,7 +273,8 @@ async def conversation(connection, count):
         report['reply_max_after_end_s'] = max(delays)
         report['realtime_pass'] = (report['functional_pass'] and statistics.median(delays) <= 2.0 and max(delays) <= 3.0
                                   and all(t['first_transcript_s'] <= 1.5 and t['final_transcript_after_end_s'] <= 1.0
-                                          and t['max_input_pacing_lag_s'] <= 0.1 for t in turns))
+                                          and t['max_input_pacing_lag_s'] <= 0.1
+                                          and not t.get('premature_reply_audio', False) for t in turns))
     except Exception as error:
         report['functional_pass'] = False
         report['realtime_pass'] = False
