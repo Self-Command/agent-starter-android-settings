@@ -28,6 +28,17 @@ async def main():
     try:
         await room.connect(os.environ["LIVEKIT_SMOKE_URL"], token)
         report = await asyncio.wait_for(received, timeout=360)
+        # Curl reports exact per-transfer times. Its timing write-out may be buffered
+        # until the next transfer, so stdout arrival offsets cannot define request latency.
+        for case in report.get("cases", []):
+            for sample in case["samples"]:
+                for field in ("first_body_observed_ms", "first_model_token_ms", "first_sentence_ms"):
+                    sample.pop(field, None)
+        for summary in report.get("summaries", []):
+            summary.pop("first_model_token_ms", None)
+            summary.pop("first_sentence_ms", None)
+        report["measurement_notes"] = [note for note in report.get("measurement_notes", []) if "first token/sentence" not in note]
+        report["measurement_notes"].append("Use curl per-transfer timings; stdout delivery offsets discarded because timing write-out may be buffered across transfers.")
         REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
         assert report.get("execution_environment") == "LiveKit Cloud agent runtime container", "Missing container report"
         assert len(report.get("cases", [])) == 4, "Incomplete benchmark report"
