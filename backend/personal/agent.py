@@ -12,6 +12,7 @@ from livekit.plugins import azure, openai, silero
 from bilingual_stt import BilingualDeepgramSTT
 from mimo_tts import MiMoTTS
 from llm_options import completion_options
+from azure_streaming_tts import AzureStreamingTTS
 
 for logger_name in ("httpx", "httpcore", "openai"):
     logging.getLogger(logger_name).setLevel(logging.WARNING)
@@ -55,7 +56,10 @@ server.setup_fnc = prewarm
 @server.rtc_session()
 async def entrypoint(ctx: agents.JobContext):
     vad = ctx.proc.userdata["vad"]
-    if os.getenv("TTS_PROVIDER", "azure").lower() == "azure":
+    provider = os.getenv("TTS_PROVIDER", "azure").lower()
+    if provider == "azure_streaming":
+        speech_tts = AzureStreamingTTS()
+    elif provider == "azure":
         speech_tts = azure.TTS(
             speech_key=os.environ["AZURE_SPEECH_KEY"],
             speech_region=os.environ["AZURE_SPEECH_REGION"],
@@ -66,6 +70,16 @@ async def entrypoint(ctx: agents.JobContext):
     else:
         speech_tts = MiMoTTS()
 
+    voice_output = speech_tts if speech_tts.capabilities.streaming else tts.StreamAdapter(
+        tts=speech_tts,
+        sentence_tokenizer=tokenize.blingfire.SentenceTokenizer(
+            min_sentence_len=6, stream_context_len=1, retain_format=True,
+        ),
+    )
+    if speech_tts.capabilities.streaming:
+        speech_tts.prewarm()
+        ctx.add_shutdown_callback(speech_tts.aclose)
+
     session = AgentSession(
         vad=vad,
         stt=BilingualDeepgramSTT(),
@@ -75,12 +89,7 @@ async def entrypoint(ctx: agents.JobContext):
             api_key=os.environ["LLM_API_KEY"],
             **completion_options(os.getenv("LLM_API_STYLE", "openai")),
         ),
-        tts=tts.StreamAdapter(
-            tts=speech_tts,
-            sentence_tokenizer=tokenize.blingfire.SentenceTokenizer(
-                min_sentence_len=6, stream_context_len=1, retain_format=True,
-            ),
-        ),
+        tts=voice_output,
         turn_handling=TurnHandlingOptions(
             turn_detection=TURN_DETECTION, interruption={"mode": "vad"},
             endpointing={"mode": "fixed", "min_delay": ENDPOINT_DELAY, "max_delay": 1.5},
@@ -88,6 +97,11 @@ async def entrypoint(ctx: agents.JobContext):
         ),
     )
     metric_tasks = set()
+
+    @session.on("user_state_changed")
+    def on_user_state(event):
+        if event.new_state == "speaking" and speech_tts.capabilities.streaming:
+            speech_tts.prewarm()
 
     async def publish_metric(payload):
         # Numerical diagnostics only, directed to the isolated CI participant.

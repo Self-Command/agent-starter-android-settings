@@ -48,6 +48,11 @@ Agent 使用 Nova-3 中文和英文实时流并合并词时间戳；中文主流
 LLM 流式输出，Azure Speech 以 24 kHz PCM 分块返回音频；默认使用
 `zh-CN-XiaoxiaoMultilingualNeural`，适合中英文混说。MiMo 配置仍保留在私有环境中，
 将 `TTS_PROVIDER` 改回 `mimo` 可回滚。
+`TTS_PROVIDER=azure_streaming` 使用微软 Speech SDK 1.52.0 的 WSS v2 文本流：
+会话开始及用户开口时预连接，每个会话复用同一个 Synthesizer，LLM 每段文字立即写入，
+不等待句号。SDK 回调的 PCM 音频立即交给 LiveKit，打断时停止旧请求并丢弃迟到的音频。
+`TTS_PROVIDER=azure` 保留官方 LiveKit REST 插件，便于回滚。
+WSS 地址根据 Region 自动生成，不读取 REST 的 `AZURE_SPEECH_ENDPOINT`。
 `AZURE_SPEECH_ENDPOINT` 必须是合成端点
 `https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`；
 门户显示的 `https://<region>.api.cognitive.microsoft.com/` 不能直接用于 TTS。
