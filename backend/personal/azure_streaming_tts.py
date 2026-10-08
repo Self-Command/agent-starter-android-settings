@@ -144,7 +144,9 @@ class AzureStreamingTTS(tts.TTS):
                     if not task.done():
                         task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
-                self._synthesizer.synthesizing.disconnect(audio_callback)
+                # Azure EventSignal exposes disconnect_all(), not disconnect(callback).
+                # This synthesizer has one owned callback, serialized by _lock.
+                self._synthesizer.synthesizing.disconnect_all()
 
 
 class AzureSynthesizeStream(tts.SynthesizeStream):

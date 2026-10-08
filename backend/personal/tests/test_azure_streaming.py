@@ -16,8 +16,8 @@ class Signal:
     def connect(self, callback):
         self.callbacks.append(callback)
 
-    def disconnect(self, callback):
-        self.callbacks.remove(callback)
+    def disconnect_all(self):
+        self.callbacks.clear()
 
 
 class Request:
