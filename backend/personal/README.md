@@ -48,6 +48,10 @@ Agent 使用 Nova-3 中文和英文实时流并合并词时间戳；中文主流
 LLM 流式输出，Azure Speech 以 24 kHz PCM 分块返回音频；默认使用
 `zh-CN-XiaoxiaoMultilingualNeural`，适合中英文混说。MiMo 配置仍保留在私有环境中，
 将 `TTS_PROVIDER` 改回 `mimo` 可回滚。
+`AZURE_SPEECH_ENDPOINT` 必须是合成端点
+`https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`；
+门户显示的 `https://<region>.api.cognitive.microsoft.com/` 不能直接用于 TTS。
+也可删除该环境变量，让官方插件根据 Region 自动生成合成端点。
 `LLM_API_STYLE=openai` 兼容原网关；DeepSeek 官方接口使用 `deepseek`、
 `LLM_BASE_URL=https://api.deepseek.com` 和 `LLM_MODEL=deepseek-flash`，
 显式关闭默认思考模式，并使用官方 `max_tokens` 参数。供应商 Key 仍只存后端。
