@@ -1,0 +1,30 @@
+name: Receive LiveKit container provider latency measurements
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  receive-cloud-report:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install the report receiver RTC client
+        run: pip install livekit==1.1.20
+      - name: Receive provider timings computed inside LiveKit Cloud
+        env:
+          LIVEKIT_SMOKE_URL: ${{ secrets.LIVEKIT_SMOKE_URL }}
+          LIVEKIT_PROBE_TOKEN: ${{ secrets.LIVEKIT_PROBE_TOKEN }}
+        run: python .github/scripts/provider-latency-receiver.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: livekit-container-provider-network-report
+          path: provider-network-report.json
+          if-no-files-found: warn
