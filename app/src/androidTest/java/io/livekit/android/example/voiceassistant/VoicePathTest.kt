@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrElse
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -30,6 +29,8 @@ import org.junit.runner.RunWith
 import java.io.File
 import java.nio.ByteOrder
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 
@@ -124,6 +125,32 @@ class VoicePathTest {
         image.recycle()
     }
 
+    private fun networkStats(stage: String) {
+        val current = room ?: return
+        for (subscriber in listOf(false, true)) {
+            val ready = CountDownLatch(1)
+            val callback = livekit.org.webrtc.RTCStatsCollectorCallback { report ->
+                val stats = JSONArray()
+                report.statsMap.values.forEach { stat ->
+                    if (stat.type in setOf("candidate-pair", "inbound-rtp", "outbound-rtp", "local-candidate", "remote-candidate")) {
+                        val safe = JSONObject().put("type", stat.type)
+                        // No IP addresses, URLs, identities, or credentials in reports.
+                        for (key in listOf("state", "nominated", "protocol", "candidateType", "currentRoundTripTime",
+                            "availableOutgoingBitrate", "kind", "packetsSent", "packetsReceived", "packetsLost", "jitter",
+                            "totalSamplesReceived", "concealedSamples", "totalAudioEnergy")) {
+                            stat.members[key]?.let { safe.put(key, it) }
+                        }
+                        stats.put(safe)
+                    }
+                }
+                record("rtc_stats_${if (subscriber) "downlink" else "uplink"}_$stage", stats.toString())
+                ready.countDown()
+            }
+            if (subscriber) current.getSubscriberRTCStats(callback) else current.getPublisherRTCStats(callback)
+            ready.await(3, TimeUnit.SECONDS)
+        }
+    }
+
     private fun uiText(tag: String): String = compose.onAllNodesWithTag(tag, useUnmergedTree = true)
         .fetchSemanticsNodes(atLeastOneRootRequired = false)
         .flatMap { it.config.getOrElse(SemanticsProperties.Text) { emptyList() } }
@@ -159,6 +186,7 @@ class VoicePathTest {
             SystemClock.elapsedRealtime() - lastRemoteAudio.get() >= 1800
         }
         screenshot("turn-$number-reply")
+        networkStats("turn_$number")
     }
 
     @Test fun realAppMicrophoneTranscriptionAndPlayback() {
@@ -184,6 +212,7 @@ class VoicePathTest {
             current?.state == Room.State.CONNECTED && track != null
         }
         record("microphone_published")
+        networkStats("connected")
         compose.onNodeWithContentDescription("Toggle Chat").performClick()
         await("greeting audio", 90000) { lastRemoteAudio.get() > 0 }
         await("greeting finished", 90000) { SystemClock.elapsedRealtime() - lastRemoteAudio.get() >= 1800 }
