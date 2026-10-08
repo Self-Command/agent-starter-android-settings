@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import io
 import json
@@ -73,12 +74,16 @@ class ProviderProtocolTest(unittest.TestCase):
         self.assertEqual(word_data(data), [self.word("你好", 0, 0.5, 0.9)])
 
     def test_session_accepts_turn_options(self):
-        session = AgentSession(turn_handling=TurnHandlingOptions(
-            turn_detection="vad", interruption={"mode": "vad"},
-            endpointing={"mode": "fixed", "min_delay": 0.45, "max_delay": 1.5},
-            preemptive_generation={"enabled": False},
-        ))
-        self.assertIsNotNone(session)
+        loop = asyncio.new_event_loop()
+        try:
+            session = AgentSession(loop=loop, turn_handling=TurnHandlingOptions(
+                turn_detection="vad", interruption={"mode": "vad"},
+                endpointing={"mode": "fixed", "min_delay": 0.45, "max_delay": 1.5},
+                preemptive_generation={"enabled": False},
+            ))
+            self.assertIsNotNone(session)
+        finally:
+            loop.close()
 
     @staticmethod
     def word(text, start, end, confidence=0.95):

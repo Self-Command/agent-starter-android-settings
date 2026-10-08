@@ -43,7 +43,9 @@ App 中只选择「Token 接口」并填写这个地址。接口接受 Android S
 新请求生成新用户身份。只有测试身份 `action-client` 会接收数值诊断，普通 App 不接收。
 接口限制每 IP 每分钟 6 次、突发 3 次；日志不记录该域名的请求地址、Token 或对话文字。
 
-Agent 使用 Nova-3 中文和英文实时流并合并词时间戳，LLM 流式输出，MiMo SSE 流式输出 PCM16。
+Agent 使用 Nova-3 中文和英文实时流并合并词时间戳；中文主流没有覆盖的高置信度英文
+在最多 300 ms 的主流等待后独立输出，避免纯英文静默丢失；低置信度英文猜测不提升为最终转录。
+LLM 流式输出，MiMo SSE 流式输出 PCM16。
 默认一个预热进程、一次会话。`VOICE_ENDPOINT_DELAY`、`VOICE_PREEMPTIVE` 和 `VOICE_REVISION`
 在 `agent.env` 中设置；变更后只重启本项目的 Agent，避免并行测速干扰供应商限流。
 
