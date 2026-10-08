@@ -41,7 +41,7 @@ services:
     stop_grace_period: 60s
     logging: *logs
     healthcheck:
-      test: ['CMD', 'python', '-c', 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8081/", timeout=2)']
+      test: ['CMD', 'python', '-c', 'import os,pathlib,urllib.request; os.kill(int(pathlib.Path("/tmp/livekit-agent-ready").read_text()),0); urllib.request.urlopen("http://127.0.0.1:8081/", timeout=2)']
       interval: 15s
       timeout: 3s
       retries: 5

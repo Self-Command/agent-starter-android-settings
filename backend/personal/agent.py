@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, TurnHandlingOptions, tts, tokenize
@@ -41,6 +42,7 @@ server.load_fnc = lambda worker: min(float(len(worker.active_jobs)), 1.0)
 
 def prewarm(proc: agents.JobProcess):
     proc.userdata["vad"] = silero.VAD.load(min_silence_duration=ENDPOINT_DELAY)
+    Path('/tmp/livekit-agent-ready').write_text(str(os.getpid()))
 
 
 server.setup_fnc = prewarm
