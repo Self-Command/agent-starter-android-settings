@@ -23,6 +23,9 @@ logging.getLogger("voice.latency").setLevel(logging.INFO)
 ENDPOINT_DELAY = float(os.getenv("VOICE_ENDPOINT_DELAY", "0.45"))
 PREEMPTIVE = os.getenv("VOICE_PREEMPTIVE", "false").lower() == "true"
 REVISION = os.getenv("VOICE_REVISION", "personal-baseline")
+TURN_DETECTION = os.getenv("VOICE_TURN_DETECTION", "vad")
+if TURN_DETECTION not in ("vad", "stt"):
+    raise ValueError("Unsupported VOICE_TURN_DETECTION")
 
 
 class Assistant(Agent):
@@ -68,7 +71,7 @@ async def entrypoint(ctx: agents.JobContext):
             ),
         ),
         turn_handling=TurnHandlingOptions(
-            turn_detection="vad", interruption={"mode": "vad"},
+            turn_detection=TURN_DETECTION, interruption={"mode": "vad"},
             endpointing={"mode": "fixed", "min_delay": ENDPOINT_DELAY, "max_delay": 1.5},
             preemptive_generation={"enabled": PREEMPTIVE},
         ),
@@ -101,7 +104,7 @@ async def entrypoint(ctx: agents.JobContext):
         task.add_done_callback(metric_tasks.discard)
 
     await session.start(room=ctx.room, agent=Assistant(), record=False)
-    await session.say("你好，语音助手已就绪。你可以用中文、英文，或者中英文混合与我交流。")
+    await session.say("你好，请讲。")
 
 
 if __name__ == "__main__":
