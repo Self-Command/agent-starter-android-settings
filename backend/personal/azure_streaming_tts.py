@@ -66,7 +66,7 @@ class AzureStreamingTTS(tts.TTS):
         async with self._lock:
             await asyncio.to_thread(self._connection.close)
 
-    async def _render(self, text_stream, output):
+    async def _render(self, text_stream, output, *, on_started=None):
         first_token = await anext(text_stream, None)
         if first_token is None:
             return
@@ -92,6 +92,8 @@ class AzureStreamingTTS(tts.TTS):
             self._synthesizer.synthesizing.connect(audio_callback)
             tasks = []
             try:
+                if on_started:
+                    on_started()
                 future = self._synthesizer.speak_async(request)
 
                 async def feed():
@@ -166,6 +168,6 @@ class AzureSynthesizeStream(tts.SynthesizeStream):
                     started = True
                 yield token
 
-        await self._tts._render(text(), output_emitter)
+        await self._tts._render(text(), output_emitter, on_started=self._mark_started)
         if started:
             output_emitter.end_segment()

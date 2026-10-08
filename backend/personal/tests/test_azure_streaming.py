@@ -165,3 +165,19 @@ class AzureStreamingTest(unittest.IsolatedAsyncioTestCase):
         await provider._render(text(), Output())
         self.assertFalse(synth.requests)
         await provider.aclose()
+
+    async def test_livekit_stream_emits_audio_and_latency_metrics(self):
+        provider = self.provider(Synthesizer())
+        metrics = []
+        provider.on("metrics_collected", metrics.append)
+        stream = provider.stream()
+        stream.push_text("测试首音频时间。")
+        stream.end_input()
+        frames = [event async for event in stream]
+        await stream.aclose()
+        self.assertTrue(frames)
+        self.assertEqual(len(metrics), 1)
+        self.assertGreaterEqual(metrics[0].ttfb, 0)
+        self.assertLess(metrics[0].ttfb, 2)
+        self.assertTrue(metrics[0].streamed)
+        await provider.aclose()
