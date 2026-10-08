@@ -8,7 +8,7 @@ RUN python compat_preload.py
 COPY agent.py bilingual_stt.py mimo_tts.py token_server.py llm_options.py ./
 COPY tests ./tests
 RUN python -m unittest discover -s tests -v
-RUN DEEPGRAM_API_KEY=fictional LLM_API_KEY=fictional LLM_BASE_URL=https://fictional.invalid MIMO_API_KEY=fictional python -c "import agent; assert agent.server"
+RUN DEEPGRAM_API_KEY=fictional LLM_API_KEY=fictional LLM_BASE_URL=https://fictional.invalid AZURE_SPEECH_KEY=fictional AZURE_SPEECH_REGION=koreacentral python -c "import agent; assert agent.server"
 RUN python agent.py download-files
 RUN python -c "import livekit.agents.ipc._preload; from livekit.plugins import silero; assert silero.VAD.load()"
 CMD ["python", "agent.py", "start"]

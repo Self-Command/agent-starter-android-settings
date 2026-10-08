@@ -45,7 +45,9 @@ App 中只选择「Token 接口」并填写这个地址。接口接受 Android S
 
 Agent 使用 Nova-3 中文和英文实时流并合并词时间戳；中文主流没有覆盖的高置信度英文
 在最多 300 ms 的主流等待后独立输出，避免纯英文静默丢失；低置信度英文猜测不提升为最终转录。
-LLM 流式输出，MiMo SSE 流式输出 PCM16。
+LLM 流式输出，Azure Speech 以 24 kHz PCM 分块返回音频；默认使用
+`zh-CN-XiaoxiaoMultilingualNeural`，适合中英文混说。MiMo 配置仍保留在私有环境中，
+将 `TTS_PROVIDER` 改回 `mimo` 可回滚。
 `LLM_API_STYLE=openai` 兼容原网关；DeepSeek 官方接口使用 `deepseek`、
 `LLM_BASE_URL=https://api.deepseek.com` 和 `LLM_MODEL=deepseek-flash`，
 显式关闭默认思考模式，并使用官方 `max_tokens` 参数。供应商 Key 仍只存后端。

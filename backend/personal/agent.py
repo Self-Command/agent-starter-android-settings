@@ -7,7 +7,7 @@ from pathlib import Path
 
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, TurnHandlingOptions, tts, tokenize
-from livekit.plugins import openai, silero
+from livekit.plugins import azure, openai, silero
 
 from bilingual_stt import BilingualDeepgramSTT
 from mimo_tts import MiMoTTS
@@ -55,6 +55,17 @@ server.setup_fnc = prewarm
 @server.rtc_session()
 async def entrypoint(ctx: agents.JobContext):
     vad = ctx.proc.userdata["vad"]
+    if os.getenv("TTS_PROVIDER", "azure").lower() == "azure":
+        speech_tts = azure.TTS(
+            speech_key=os.environ["AZURE_SPEECH_KEY"],
+            speech_region=os.environ["AZURE_SPEECH_REGION"],
+            voice=os.getenv("AZURE_TTS_VOICE", "zh-CN-XiaoxiaoMultilingualNeural"),
+            language=os.getenv("AZURE_TTS_LANGUAGE", "zh-CN"),
+            sample_rate=24000,
+        )
+    else:
+        speech_tts = MiMoTTS()
+
     session = AgentSession(
         vad=vad,
         stt=BilingualDeepgramSTT(),
@@ -65,7 +76,7 @@ async def entrypoint(ctx: agents.JobContext):
             **completion_options(os.getenv("LLM_API_STYLE", "openai")),
         ),
         tts=tts.StreamAdapter(
-            tts=MiMoTTS(),
+            tts=speech_tts,
             sentence_tokenizer=tokenize.blingfire.SentenceTokenizer(
                 min_sentence_len=6, stream_context_len=1, retain_format=True,
             ),
