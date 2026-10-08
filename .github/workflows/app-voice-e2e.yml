@@ -38,21 +38,26 @@ jobs:
           python -m grpc_tools.protoc -I "$RUNNER_TEMP/voice-proto" --python_out="$RUNNER_TEMP/voice-proto" --grpc_python_out="$RUNNER_TEMP/voice-proto" "$RUNNER_TEMP/voice-proto/emulator_audio.proto"
           echo "VOICE_PROTO_DIR=$RUNNER_TEMP/voice-proto" >> "$GITHUB_ENV"
           sudo chmod 666 /dev/kvm
-          # Use ALSA's clocked null device for a headless virtual sound card.
+          # Match Google's headless emulator container PulseAudio configuration.
           sudo apt-get update -qq
-          sudo apt-get install -y libasound2t64
-          cat > "$HOME/.asoundrc" <<'ALSA'
-          pcm.!default {
-            type null
-          }
-          ALSA
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=voice_test
+          pactl set-default-sink voice_test
+          pactl load-module module-native-protocol-unix auth-anonymous=1 socket=/tmp/pulse-socket
+          PULSE_SERVER=unix:/tmp/pulse-socket pactl info
+          echo 'PULSE_SERVER=unix:/tmp/pulse-socket' >> "$GITHUB_ENV"
+          echo 'QEMU_PA_SERVER=unix:/tmp/pulse-socket' >> "$GITHUB_ENV"
       - name: Real UI, microphone, WebRTC, transcription and playback
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ANDROID_VOICE_TEST_CONFIG: ${{ secrets.ANDROID_VOICE_TEST_CONFIG }}
-          QEMU_AUDIO_DRV: alsa
+          QEMU_AUDIO_DRV: pa
         with:
           api-level: 35
+          # Pin the emulator implementation independently from the API 35 image.
+          # Archive: Android Emulator 35.4.9 Stable (Google build 13025442).
+          emulator-build: 13025442
           target: google_apis
           arch: x86_64
           profile: pixel_6
