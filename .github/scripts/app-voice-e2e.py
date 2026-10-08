@@ -85,7 +85,14 @@ def main():
     channel = grpc.insecure_channel("127.0.0.1:8554")
     grpc.channel_ready_future(channel).result(timeout=30)
     stub = rpc.EmulatorControllerStub(channel)
-    stub.setMicrophoneState(pb.MicrophoneState(realAudioEnabled=False), timeout=10)
+    try:
+        stub.setMicrophoneState(pb.MicrophoneState(realAudioEnabled=False), timeout=10)
+    except grpc.RpcError as error:
+        if error.code() != grpc.StatusCode.UNIMPLEMENTED:
+            raise
+        # The pinned emulator predates this RPC. Its host input is an isolated
+        # silent PulseAudio source; injectAudio still supplies the virtual mic.
+        print("Using silent host input; emulator has no microphone-state RPC", flush=True)
     print("Emulator gRPC microphone ready", flush=True)
     audio_format = pb.AudioFormat(samplingRate=24000, channels=pb.AudioFormat.Mono,
                                 format=pb.AudioFormat.AUD_FMT_S16, mode=pb.AudioFormat.MODE_REAL_TIME)
