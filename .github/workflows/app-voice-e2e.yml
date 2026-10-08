@@ -44,9 +44,11 @@ jobs:
           pulseaudio --start --exit-idle-time=-1
           pactl load-module module-null-sink sink_name=voice_test
           pactl set-default-sink voice_test
-          pactl load-module module-native-protocol-tcp listen=127.0.0.1 auth-ip-acl=127.0.0.1 auth-anonymous=1
-          echo 'PULSE_SERVER=tcp:127.0.0.1:4713' >> "$GITHUB_ENV"
-          echo 'QEMU_PA_SERVER=tcp:127.0.0.1:4713' >> "$GITHUB_ENV"
+          # Match Google's headless emulator container audio socket configuration.
+          pactl load-module module-native-protocol-unix auth-anonymous=1 socket=/tmp/pulse-socket
+          PULSE_SERVER=unix:/tmp/pulse-socket pactl info
+          echo 'PULSE_SERVER=unix:/tmp/pulse-socket' >> "$GITHUB_ENV"
+          echo 'QEMU_PA_SERVER=unix:/tmp/pulse-socket' >> "$GITHUB_ENV"
       - name: Real UI, microphone, WebRTC, transcription and playback
         uses: reactivecircus/android-emulator-runner@v2
         env:

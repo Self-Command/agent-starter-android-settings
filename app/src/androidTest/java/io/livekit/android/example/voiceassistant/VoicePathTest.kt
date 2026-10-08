@@ -49,6 +49,7 @@ class VoicePathTest {
     @Volatile private var active = false
     private lateinit var config: JSONObject
     private val startMs = SystemClock.elapsedRealtime()
+    private var lastUiClockMs = SystemClock.elapsedRealtime()
     private val seenMessages = mutableMapOf<String, String?>()
     private fun lastDetail(event: String) = synchronized(seenMessages) { seenMessages[event] }
 
@@ -60,6 +61,9 @@ class VoicePathTest {
     @Before fun prepare() {
         assumeTrue(InstrumentationRegistry.getArguments().getString("voiceE2E") == "true")
         config = JSONObject(File(context.noBackupFilesDir, "voice-test-config.json").readText())
+        // A live call never becomes animation-idle. Advance Compose in wall-clock
+        // increments so UI queries do not wait for speech/visualization to finish.
+        compose.mainClock.autoAdvance = false
         active = true
         File(context.noBackupFilesDir, LiveKitSettingsStore.FILE_NAME).delete()
         InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
@@ -113,13 +117,22 @@ class VoicePathTest {
     private fun await(description: String, timeout: Long = 60000, condition: () -> Boolean) {
         val deadline = SystemClock.elapsedRealtime() + timeout
         while (SystemClock.elapsedRealtime() < deadline) {
+            pumpUi()
             if (condition()) return
             SystemClock.sleep(100)
         }
         throw AssertionError("Timed out: $description (see voice-timeline.json)")
     }
 
+    private fun pumpUi() {
+        val now = SystemClock.elapsedRealtime()
+        compose.mainClock.advanceTimeBy((now - lastUiClockMs).coerceAtLeast(1))
+        lastUiClockMs = now
+    }
+
     private fun screenshot(name: String) {
+        pumpUi()
+        compose.waitForIdle()
         val image = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot() ?: return
         File(directory, "$name.png").outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
         image.recycle()
@@ -193,12 +206,13 @@ class VoicePathTest {
         // Exercise the settings UI itself. Never echo credentials in assertions.
         try {
             compose.onNodeWithTag("open_settings").performClick()
+            pumpUi()
             compose.onNodeWithTag("mode_DIRECT").performClick()
-            compose.waitForIdle()
+            pumpUi()
             compose.onNodeWithTag("server_url").performTextReplacement(config.getString("url"))
-            compose.waitForIdle()
+            pumpUi()
             compose.onNodeWithTag("connection_token").performTextReplacement(config.getString("token"))
-            compose.waitForIdle()
+            pumpUi()
             compose.onNodeWithTag("save_settings").performScrollTo().performClick()
             await("configuration persisted", 20000) {
                 val saved = LiveKitSettingsStore(context).load()
@@ -226,6 +240,7 @@ class VoicePathTest {
         record("microphone_published")
         networkStats("connected")
         compose.onNodeWithContentDescription("Toggle Chat").performClick()
+        pumpUi()
         await("greeting audio", 90000) { lastRemoteAudio.get() > 0 }
         await("greeting finished", 90000) { SystemClock.elapsedRealtime() - lastRemoteAudio.get() >= 1800 }
         screenshot("connected")
@@ -239,6 +254,7 @@ class VoicePathTest {
         await("microphone re-enabled", 45000) { lastDetail("microphone_state") == "true" }
         turn(2)
         compose.onNodeWithContentDescription("End Call").performClick()
+        pumpUi()
         compose.onNodeWithTag("start_call").assertExists()
         record("end_call_clicked")
         assertTrue("Captured microphone and agent PCM", lastLocalAudio.get() > 0 && lastRemoteAudio.get() > 0)
