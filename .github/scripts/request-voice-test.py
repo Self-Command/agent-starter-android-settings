@@ -344,6 +344,13 @@ async def conversation(connection, count, samples=None):
         report['error_type'] = type(error).__name__
     finally:
         current = None
+        report['remote_participants'] = [{'kind': int(p.kind), 'agent_state': p.attributes.get('lk.agent.state')}
+                                         for p in room.remote_participants.values()]
+        if room.isconnected():
+            try:
+                report['final_transport'] = await transport_snapshot(room)
+            except Exception as error:
+                report['transport_error_type'] = type(error).__name__
         await room.disconnect()
         pending = list(tasks)
         for task in pending:
