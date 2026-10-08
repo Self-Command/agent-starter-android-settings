@@ -13,6 +13,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -45,7 +46,7 @@ fun UserMessage(
             Text(
                 text = message.message,
                 fontWeight = FontWeight.Medium,
-                modifier = Modifier.padding(8.dp),
+                modifier = Modifier.padding(8.dp).testTag("user_transcript"),
                 color = MaterialTheme.colorScheme.onSurface
             )
         }

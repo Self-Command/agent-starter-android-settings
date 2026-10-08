@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -76,7 +77,7 @@ fun ChatLog(room: Room, messages: List<ReceivedMessage>, modifier: Modifier = Mo
                         // Agent transcription or chat message
                         Text(
                             text = message.message,
-                            modifier = Modifier.align(Alignment.CenterStart)
+                            modifier = Modifier.align(Alignment.CenterStart).testTag("agent_transcript")
                         )
                     }
                 }

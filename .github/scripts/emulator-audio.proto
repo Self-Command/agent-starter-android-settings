@@ -1,0 +1,25 @@
+// Wire-compatible subset of Google's Android Emulator controller protocol.
+// Reference: https://github.com/google/android-emulator-webrtc/blob/master/proto/emulator_controller.proto
+syntax = "proto3";
+package android.emulation.control;
+import "google/protobuf/empty.proto";
+service EmulatorController {
+  rpc streamAudio(AudioFormat) returns (stream AudioPacket);
+  rpc injectAudio(stream AudioPacket) returns (google.protobuf.Empty);
+  rpc setMicrophoneState(MicrophoneState) returns (google.protobuf.Empty);
+}
+message AudioFormat {
+  enum SampleFormat { AUD_FMT_U8 = 0; AUD_FMT_S16 = 1; }
+  enum Channels { Mono = 0; Stereo = 1; }
+  enum DeliveryMode { MODE_UNSPECIFIED = 0; MODE_REAL_TIME = 1; }
+  uint64 samplingRate = 1;
+  Channels channels = 2;
+  SampleFormat format = 3;
+  DeliveryMode mode = 4;
+}
+message AudioPacket {
+  AudioFormat format = 1;
+  uint64 timestamp = 2;
+  bytes audio = 3;
+}
+message MicrophoneState { bool realAudioEnabled = 1; }

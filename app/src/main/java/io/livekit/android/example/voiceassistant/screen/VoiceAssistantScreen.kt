@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,6 +58,7 @@ import io.livekit.android.compose.ui.VideoTrackView
 import io.livekit.android.example.voiceassistant.rememberCanEnableCamera
 import io.livekit.android.example.voiceassistant.rememberCanEnableMic
 import io.livekit.android.example.voiceassistant.requirePermissions
+import io.livekit.android.example.voiceassistant.diagnostics.VoiceSessionProbe
 import io.livekit.android.example.voiceassistant.ui.AgentVisualization
 import io.livekit.android.example.voiceassistant.ui.ChatBar
 import io.livekit.android.example.voiceassistant.ui.ChatLog
@@ -65,6 +67,7 @@ import io.livekit.android.example.voiceassistant.viewmodel.VoiceAssistantViewMod
 import io.livekit.android.room.track.screencapture.ScreenCaptureParams
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -115,7 +118,9 @@ fun VoiceAssistant(
                 return@LaunchedEffect
             }
 
+            VoiceSessionProbe.record("session_start")
             val result = session.start()
+            VoiceSessionProbe.record(if (result.isSuccess) "session_connected" else "session_failed")
 
             // Handle if the session fails to connect.
             if (result.isFailure) {
@@ -142,7 +147,9 @@ fun VoiceAssistant(
 
         LaunchedEffect(canEnableMic, requestedAudio) {
             session.waitUntilConnected()
+            VoiceSessionProbe.record("microphone_request", (canEnableMic && requestedAudio).toString())
             localMedia.setMicrophoneEnabled(canEnableMic && requestedAudio)
+            VoiceSessionProbe.record("microphone_applied", localMedia.isMicrophoneEnabled.toString())
         }
 
         LaunchedEffect(canEnableVideo, requestedVideo) {
@@ -152,6 +159,18 @@ fun VoiceAssistant(
 
         // SessionMessages handles all transcriptions and chat messages
         val sessionMessages = rememberSessionMessages()
+        // The release implementation is a no-op. Cloud instrumentation can observe
+        // received messages without replacing the session, microphone or token source.
+        if (VoiceSessionProbe.enabled) {
+            LaunchedEffect(sessionMessages) {
+                snapshotFlow { sessionMessages.messages.map { it.id to ((it.fromParticipant?.identity == room.localParticipant.identity) to it.message) } }
+                    .collect { messages ->
+                        messages.forEach { (_, entry) ->
+                            VoiceSessionProbe.record(if (entry.first) "user_message_received" else "agent_message_received", entry.second)
+                        }
+                    }
+            }
+        }
 
         // Agent provides state information about the agent participant.
         val agent = rememberAgent()
