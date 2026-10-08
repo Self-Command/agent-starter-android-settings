@@ -11,6 +11,7 @@ from livekit.plugins import openai, silero
 
 from bilingual_stt import BilingualDeepgramSTT
 from mimo_tts import MiMoTTS
+from llm_options import completion_options
 
 for logger_name in ("httpx", "httpcore", "openai"):
     logging.getLogger(logger_name).setLevel(logging.WARNING)
@@ -61,8 +62,7 @@ async def entrypoint(ctx: agents.JobContext):
             model=os.getenv("LLM_MODEL", "gpt-5.6-luna"),
             base_url=os.environ["LLM_BASE_URL"],
             api_key=os.environ["LLM_API_KEY"],
-            reasoning_effort="none",
-            max_completion_tokens=256,
+            **completion_options(os.getenv("LLM_API_STYLE", "openai")),
         ),
         tts=tts.StreamAdapter(
             tts=MiMoTTS(),

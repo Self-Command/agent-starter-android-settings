@@ -7,11 +7,13 @@ import time
 from datetime import datetime, timezone
 
 import aiohttp
+from llm_options import completion_options
 
 
 async def measure(client, provider, index, trace):
     start = time.monotonic()
     result = {'provider': provider['name'], 'sample': index, 'first_usable_ms': None, 'chunks': 0}
+    text = ''
     try:
         async with client.post(provider['url'] + '/chat/completions',
                                headers={'Authorization': 'Bearer ' + provider['key']},
@@ -48,6 +50,10 @@ async def measure(client, provider, index, trace):
                         result['chunks'] += 1
                         if result['first_usable_ms'] is None:
                             result['first_usable_ms'] = round((time.monotonic() - start) * 1000)
+                        if provider['name'] != 'tts':
+                            text += content
+                            if result.get('first_sentence_ms') is None and any(c in text for c in '。！？.!?\n'):
+                                result['first_sentence_ms'] = round((time.monotonic() - start) * 1000)
     except Exception as error:
         result['error_type'] = type(error).__name__
     finally:
@@ -58,10 +64,12 @@ async def measure(client, provider, index, trace):
 
 async def main():
     llm = {'name': 'llm', 'url': os.environ['LLM_BASE_URL'].rstrip('/'), 'key': os.environ['LLM_API_KEY'],
-           'body': {'model': os.environ['LLM_MODEL'], 'stream': True, 'reasoning_effort': 'none',
-                    'max_completion_tokens': 256,
+           'body': {'model': os.environ['LLM_MODEL'], 'stream': True,
                     'messages': [{'role': 'system', 'content': '你是中英双语语音助手。先用一句简短完整的句子直接回答，最多80个汉字。'},
                                  {'role': 'user', 'content': '语音助手连接正常吗？Please reply briefly.'}]}}
+    options = completion_options(os.getenv('LLM_API_STYLE', 'openai'))
+    llm['body'].update(options.pop('extra_body', {}))
+    llm['body'].update(options)
     tts = {'name': 'tts', 'url': os.environ['MIMO_BASE_URL'].rstrip('/'), 'key': os.environ['MIMO_API_KEY'],
            'body': {'model': os.environ['MIMO_TTS_MODEL'], 'stream': True,
                     'messages': [{'role': 'assistant', 'content': '连接正常，你可以开始与我交流。'}],

@@ -46,6 +46,9 @@ App 中只选择「Token 接口」并填写这个地址。接口接受 Android S
 Agent 使用 Nova-3 中文和英文实时流并合并词时间戳；中文主流没有覆盖的高置信度英文
 在最多 300 ms 的主流等待后独立输出，避免纯英文静默丢失；低置信度英文猜测不提升为最终转录。
 LLM 流式输出，MiMo SSE 流式输出 PCM16。
+`LLM_API_STYLE=openai` 兼容原网关；DeepSeek 官方接口使用 `deepseek`、
+`LLM_BASE_URL=https://api.deepseek.com` 和 `LLM_MODEL=deepseek-flash`，
+显式关闭默认思考模式，并使用官方 `max_tokens` 参数。供应商 Key 仍只存后端。
 默认一个预热进程、一次会话。`VOICE_ENDPOINT_DELAY`、`VOICE_PREEMPTIVE` 和 `VOICE_REVISION`
 在 `agent.env` 中设置；变更后只重启本项目的 Agent，避免并行测速干扰供应商限流。
 
