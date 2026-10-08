@@ -32,6 +32,10 @@ BBR 只影响 TCP，不会缩短模型的生成时间。实际 ICE 协议必须�
 - `livekit.yaml`：LiveKit 密钥和网络配置。
 - `redis.conf`：仅含本机端口和 32 MiB 缓存上限；权限 644，让 Redis 容器用户可读取。
 
+无凭据的配置样例分别为 `agent.env.example`、`token.env.example`、`livekit.yaml.template`
+和 `redis.conf`。将样例复制到私有目录并替换占位符；媒体 IP 过滤只保留服务器公网地址，
+避免客户端先探测 Docker 网桥地址。真实域名 Nginx 模板须对应 DNS 和证书。
+
 Token 接口地址为 `https://<域名>/token/<随机秘密>`，完整地址属于私密连接凭据。
 App 中只选择「Token 接口」并填写这个地址。接口接受 Android SDK 的 POST JSON 请求，
 返回 `server_url` 和 `participant_token`。Token 有效期 10 分钟，固定房间 `personal-voice`，

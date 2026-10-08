@@ -93,6 +93,8 @@ class BilingualStream(stt.RecognizeStream):
         english_interim = []
         english_available = True
         latest_primary_end = 0.0
+        latest_delivered_end = 0.0
+        last_primary_text_wall = 0.0
         input_samples = 0
         first_interim = False
 
@@ -116,33 +118,54 @@ class BilingualStream(stt.RecognizeStream):
                 english.end_input()
 
         async def read_english():
-            nonlocal english_interim, english_final, english_available
+            nonlocal english_interim, english_final, english_available, latest_delivered_end
             try:
                 async for event in english:
                     if event.alternatives:
-                        words = word_data(event.alternatives[0])
+                        data = event.alternatives[0]
+                        words = word_data(data)
+                        confident = words and sum(w['confidence'] for w in words) / len(words) >= 0.80
                         if event.type == stt.SpeechEventType.FINAL_TRANSCRIPT:
                             english_final = [word for word in english_final if word["end"] >= latest_primary_end - 15] + words
                             english_interim = []
+                            if confident:
+                                # Chinese remains preferred for overlapping speech. A pure
+                                # English utterance must not disappear when zh-CN is silent.
+                                await asyncio.sleep(0.30)
+                                cutoff = max(latest_primary_end, latest_delivered_end)
+                                fresh = [word for word in words if word['end'] > cutoff + 0.08]
+                                if fresh:
+                                    latest_delivered_end = fresh[-1]['end']
+                                    fallback = dataclasses.replace(data, text=join_words(fresh), words=None,
+                                                                   start_time=fresh[0]['start'], end_time=fresh[-1]['end'])
+                                    self._event_ch.send_nowait(dataclasses.replace(event, alternatives=[fallback]))
                         elif event.type == stt.SpeechEventType.INTERIM_TRANSCRIPT:
                             english_interim = words
+                            if confident and time.monotonic() - last_primary_text_wall > 0.35:
+                                self._event_ch.send_nowait(event)
             except Exception:
                 english_available = False
                 logger.warning("English secondary STT unavailable; Chinese realtime STT continues")
 
         async def read_chinese():
-            nonlocal latest_primary_end, first_interim
+            nonlocal latest_primary_end, latest_delivered_end, last_primary_text_wall, first_interim
             async for event in chinese:
+                if event.alternatives and event.alternatives[0].text:
+                    last_primary_text_wall = time.monotonic()
                 if event.type == stt.SpeechEventType.INTERIM_TRANSCRIPT and not first_interim:
                     first_interim = True
                     logger.info("first_interim_transcript", extra={"audio_seconds_received": round(input_samples, 3)})
                 if event.type == stt.SpeechEventType.FINAL_TRANSCRIPT and event.alternatives:
                     # Never hold the primary transcript for an HTTP request or an LLM.
                     # A secondary result has at most 120ms to catch up.
-                    started = time.monotonic()
-                    await asyncio.sleep(0.12)
                     data = event.alternatives[0]
                     primary_words = word_data(data)
+                    primary_end = primary_words[-1]['end'] if primary_words else data.end_time
+                    latest_primary_end = max(latest_primary_end, primary_end)
+                    if primary_end <= latest_delivered_end + 0.05:
+                        continue  # A delayed duplicate of already delivered English speech.
+                    started = time.monotonic()
+                    await asyncio.sleep(0.12)
                     seen = set()
                     secondary = []
                     for word in english_final + english_interim:
@@ -153,7 +176,7 @@ class BilingualStream(stt.RecognizeStream):
                     secondary.sort(key=lambda word: word["start"])
                     text = merge_words(primary_words, secondary) if primary_words else data.text
                     event = dataclasses.replace(event, alternatives=[dataclasses.replace(data, text=text, words=None)])
-                    latest_primary_end = data.end_time
+                    latest_delivered_end = max(latest_delivered_end, primary_end)
                     logger.info("final_transcript_ready", extra={"merge_delay_seconds": round(time.monotonic() - started, 3)})
                 self._event_ch.send_nowait(event)
 
