@@ -94,11 +94,22 @@ class VoicePathTest {
     private fun attachAudio(track: AudioTrack, local: Boolean) {
         if (sinks.any { it.first === track }) return
         var lastRecorded = 0L
-        val sink = AudioTrackSink { data, bits, _, _, _, _ ->
-            if (bits == 16) {
+        var frameCount = 0L
+        val sink = AudioTrackSink { data, bits, sampleRate, channels, _, _ ->
+            frameCount++
+            if (frameCount == 1L) record(if (local) "microphone_format" else "speaker_format", "$bits-bit/$sampleRate-Hz/$channels-channel")
+            if (bits == 16 || bits == 32) {
                 val buffer = data.duplicate().order(ByteOrder.LITTLE_ENDIAN)
                 var peak = 0
-                while (buffer.remaining() >= 2) peak = maxOf(peak, abs(buffer.short.toInt()))
+                if (bits == 16) {
+                    while (buffer.remaining() >= 2) peak = maxOf(peak, abs(buffer.short.toInt()))
+                } else {
+                    while (buffer.remaining() >= 4) {
+                        val sample = buffer.float
+                        if (sample.isFinite()) peak = maxOf(peak, (abs(sample) * 32768).toInt())
+                    }
+                }
+                if (local && frameCount % 100 == 0L) record("microphone_frames", "count=$frameCount/peak=$peak")
                 if (peak >= 350) {
                     val now = SystemClock.elapsedRealtime()
                     (if (local) lastLocalAudio else lastRemoteAudio).set(now)
@@ -258,7 +269,6 @@ class VoicePathTest {
         compose.onNodeWithTag("start_call").assertExists()
         record("end_call_clicked")
         assertTrue("Captured microphone and agent PCM", lastLocalAudio.get() > 0 && lastRemoteAudio.get() > 0)
-        ProviderLatencyProbe(context, config).run()
         record("test_completed")
     }
 
@@ -268,6 +278,9 @@ class VoicePathTest {
         VoiceSessionProbe.onRoomCreated = null
         sinks.forEach { (track, sink) -> runCatching { track.removeSink(sink) } }
         scope.cancel()
+        // Direct controls still produce a report if a device/audio check fails.
+        // The app test remains failed; control results cannot make it pass.
+        runCatching { ProviderLatencyProbe(context, config).run() }
         File(directory, "voice-timeline.json").writeText(JSONObject()
             .put("clock", "Android elapsedRealtime milliseconds")
             .put("input", "synthetic bilingual speech injected into emulator microphone")

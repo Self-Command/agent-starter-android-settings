@@ -79,6 +79,8 @@ def main():
     adb("shell", "pm", "grant", PACKAGE, "android.permission.RECORD_AUDIO")
     adb("shell", "settings", "put", "system", "volume_voice", "5")
     adb("shell", "settings", "put", "system", "volume_music", "10")
+    adb("shell", "cmd", "media_session", "volume", "--stream", "0", "--set", "5")
+    adb("shell", "cmd", "media_session", "volume", "--stream", "3", "--set", "10")
     adb("shell", "rm", "-rf", DEVICE_DIR)
     channel = grpc.insecure_channel("127.0.0.1:8554")
     grpc.channel_ready_future(channel).result(timeout=30)
@@ -190,6 +192,7 @@ def main():
         subprocess.run(["adb", "pull", "/sdcard/voice-e2e.mp4", str(OUTPUT / "app-operations.mp4")], check=False)
         (OUTPUT / "emulator-timeline.json").write_text(json.dumps(
             {"clock_sync": clock_sync, "events": host_events}, indent=2))
+        (OUTPUT / "android-audio-routing.txt").write_bytes(adb("shell", "dumpsys", "audio").stdout)
         adb("shell", "run-as", PACKAGE, "rm", "-f", "no_backup/voice-test-config.json")
         adb("shell", "am", "force-stop", PACKAGE)
 
