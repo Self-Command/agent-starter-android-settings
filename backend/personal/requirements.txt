@@ -1,0 +1,1 @@
+livekit-agents[openai,deepgram,silero]==1.8.5

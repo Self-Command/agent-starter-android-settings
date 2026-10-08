@@ -1,0 +1,50 @@
+name: Personal LiveKit backend
+on:
+  workflow_dispatch:
+  push:
+    branches: ['codex/personal-livekit']
+    paths: ['backend/personal/**', '.github/workflows/personal-backend.yml']
+  pull_request:
+    paths: ['backend/personal/**', '.github/workflows/personal-backend.yml']
+permissions:
+  contents: read
+  packages: write
+concurrency:
+  group: personal-backend-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: backend/personal
+          load: true
+          tags: ghcr.io/self-command/livekit-personal-agent:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Export tested image for deployment
+        if: github.event_name != 'pull_request'
+        run: |
+          docker push ghcr.io/self-command/livekit-personal-agent:${GITHUB_SHA}
+          mkdir -p backend-artifact
+          docker save ghcr.io/self-command/livekit-personal-agent:${GITHUB_SHA} | gzip -1 > backend-artifact/agent-image.tar.gz
+          sha256sum backend-artifact/agent-image.tar.gz > backend-artifact/SHA256SUMS
+          docker image inspect ghcr.io/self-command/livekit-personal-agent:${GITHUB_SHA} --format '{{json .RepoDigests}}' > backend-artifact/image-digests.json
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && success()
+        with:
+          name: personal-backend-image
+          path: backend-artifact/
+          compression-level: 0
+          retention-days: 7
