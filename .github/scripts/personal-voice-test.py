@@ -83,8 +83,8 @@ async def new_connection(client, config):
         return {'url': body['server_url'], 'token': body['participant_token']}
 
 
-async def behavior_checks(client, config, interrupt_path):
-    """Interrupt a fresh greeting, then disconnect and join again with a renewed token."""
+async def behavior_checks(client, config, interrupt_path, long_question_path):
+    """Interrupt an actual answer, then disconnect and join again with a renewed token."""
     report = {'interruption_pass': False, 'reconnect_pass': False}
     room = rtc.Room()
     tasks = set()
@@ -124,18 +124,39 @@ async def behavior_checks(client, config, interrupt_path):
         track = rtc.LocalAudioTrack.create_audio_track('interrupt-microphone', source)
         await room.local_participant.publish_track(track, rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE))
         await asyncio.wait_for(got_audio.wait(), 30)
+        deadline = time.monotonic() + 30
+        while time.monotonic() - last_audio < 0.8:
+            if time.monotonic() > deadline:
+                raise TimeoutError('Greeting did not finish')
+            await asyncio.sleep(0.1)
+        got_audio.clear()
+        with wave.open(str(long_question_path), 'rb') as wav:
+            question = wav.readframes(wav.getnframes()) + b'\0' * 24000
+        question_start = time.monotonic()
+        for offset in range(0, len(question), 960):
+            await asyncio.sleep(max(0, question_start + offset / 48000 - time.monotonic()))
+            chunk = question[offset:offset + 960]
+            await source.capture_frame(rtc.AudioFrame(data=chunk, sample_rate=24000, num_channels=1,
+                                                      samples_per_channel=len(chunk) // 2))
+        await source.wait_for_playout()
+        await asyncio.wait_for(got_audio.wait(), 45)
+        finals.clear()
         with wave.open(str(interrupt_path), 'rb') as wav:
             pcm = wav.readframes(wav.getnframes())
         active = [i for i, (value,) in enumerate(struct.iter_unpack('<h', pcm)) if abs(value) > 600]
         base = time.monotonic()
         speech_start = base + active[0] / 24000
+        speech_end = base + (active[-1] + 1) / 24000
         stopped = None
+        continued = False
         framed = pcm + b'\0' * 96000
         for offset in range(0, len(framed), 960):
             await asyncio.sleep(max(0, base + offset / 48000 - time.monotonic()))
             if time.monotonic() > speech_start + 0.3 and time.monotonic() - last_audio > 0.35:
                 if stopped is None:
                     stopped = max(0.0, last_audio - speech_start)
+            if speech_start + 1.5 < last_audio < speech_end - 0.2:
+                continued = True
             chunk = framed[offset:offset + 960]
             await source.capture_frame(rtc.AudioFrame(data=chunk, sample_rate=24000, num_channels=1,
                                                       samples_per_channel=len(chunk) // 2))
@@ -146,9 +167,14 @@ async def behavior_checks(client, config, interrupt_path):
                               for p in room.remote_participants.values()) and time.monotonic() - last_audio > 0.8:
                 break
             await asyncio.sleep(0.1)
-        report['greeting_audio_ceased_after_speech_s'] = round(stopped, 3) if stopped is not None else None
-        report['interrupt_transcription_received'] = bool(finals)
-        report['interruption_pass'] = stopped is not None and stopped <= 1.5 and bool(finals)
+        report['answer_audio_ceased_after_speech_s'] = round(stopped, 3) if stopped is not None else None
+        transcript = ' '.join(finals)
+        recognized = '停' in transcript and '收到' in transcript
+        report['interrupt_transcription'] = transcript  # Fictional test utterance only.
+        report['old_audio_continued'] = continued
+        report['reply_resumed_after_interruption'] = last_audio > speech_end
+        report['interruption_pass'] = (stopped is not None and stopped <= 1.5 and recognized
+                                       and not continued and last_audio > speech_end)
         report['transport'] = await probe.transport_snapshot(room)
         await room.disconnect()
         await source.aclose()
@@ -185,6 +211,8 @@ async def main():
         chinese = await fixture(client, config['tts'], 'chinese', '请用一句话告诉我，语音助手连接正常吗？')
         english = await fixture(client, config['tts'], 'english', 'Please say that the voice connection is working.')
         interrupt = await fixture(client, config['tts'], 'interrupt', '请停一下，只回答收到。')
+        long_question = (await fixture(client, config['tts'], 'long-question', '请给我简单介绍三个语音助手的用途。')
+                         if os.getenv('VOICE_TEST_BEHAVIOR') == 'true' else None)
         paused = pause_fixture(probe.SAMPLE)
         mixed = {'path': probe.SAMPLE, 'name': 'Chinese-English', 'terms': ['livekit', 'api', 'settings'], 'chinese': True}
         samples = [mixed,
@@ -192,7 +220,7 @@ async def main():
                    {'path': english, 'name': 'English', 'terms': ['voice', 'connection']},
                    {**mixed, 'path': paused, 'name': 'Chinese-English with 250ms pause'}, mixed]
         report = await probe.conversation(connection, int(os.getenv('VOICE_TEST_TURNS', '10')), samples)
-        behavior = await behavior_checks(client, config, interrupt) if os.getenv('VOICE_TEST_BEHAVIOR') == 'true' else {'skipped': True}
+        behavior = await behavior_checks(client, config, interrupt, long_question) if long_question else {'skipped': True}
     probe.OUT.joinpath('behavior.json').write_text(json.dumps(behavior, indent=2), encoding='utf-8')
     lines = ['# Personal LiveKit voice acceptance',
              'Production Android App TokenSource runs on JVM in Actions. Audio is synthetic RTC; no phone/UI test.',

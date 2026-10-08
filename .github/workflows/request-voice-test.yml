@@ -87,4 +87,4 @@ jobs:
           retention-days: 14
       - name: Remove temporary connection credentials
         if: always()
-        run: rm -f "$RUNNER_TEMP/resolved-connection.json" "$RUNNER_TEMP/chinese.wav" "$RUNNER_TEMP/english.wav" "$RUNNER_TEMP/interrupt.wav" "$RUNNER_TEMP/mixed-with-pause.wav"
+        run: rm -f "$RUNNER_TEMP/resolved-connection.json" "$RUNNER_TEMP/chinese.wav" "$RUNNER_TEMP/english.wav" "$RUNNER_TEMP/interrupt.wav" "$RUNNER_TEMP/long-question.wav" "$RUNNER_TEMP/mixed-with-pause.wav"
