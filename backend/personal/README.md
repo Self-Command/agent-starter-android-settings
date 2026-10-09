@@ -49,7 +49,7 @@ LLM 流式输出，Azure Speech 以 24 kHz PCM 分块返回音频；默认使用
 `zh-CN-XiaoxiaoMultilingualNeural`，适合中英文混说。MiMo 配置仍保留在私有环境中，
 将 `TTS_PROVIDER` 改回 `mimo` 可回滚。
 默认保留 `TTS_PROVIDER=azure`，即官方 LiveKit REST 插件。
-此模式默认 `AZURE_TTS_RATE=1.2`，使用 Azure 官方 SSML prosody 调快约 20%，
+此模式默认 `AZURE_TTS_RATE=2.0`，使用 Azure 官方 SSML prosody 设置 2 倍语速，
 保留原音色和音调。可在私有环境调整倍率，`1.0` 恢复原语速；有效范围为 0.5–2.0。
 这项只改变朗读速度，不限制模型回复长度，也不影响文字立即显示。
 可选的 `TTS_PROVIDER=azure_streaming` 使用微软 Speech SDK 1.52.0 的 WSS v2 文本流：
