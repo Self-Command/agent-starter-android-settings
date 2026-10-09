@@ -19,7 +19,6 @@ from google.protobuf.json_format import MessageToDict
 logging.basicConfig(level=logging.ERROR)
 OUT = Path('voice-reports')
 SAMPLE = Path('.github/test-audio/chinese-english.wav')
-VOICE_CONTEXT = ''
 QUESTION = '我正在使用 LiveKit 开发 Android App。Please check the API key and settings.'
 
 
@@ -112,8 +111,7 @@ async def provider_controls(config):
             # Compare the gateway's native Responses path without changing the deployed model.
             for i in range(2):
                 body = {'model': config['llm']['model'], 'stream': True, 'store': False,
-                        'reasoning': {'effort': 'none'}, 'max_output_tokens': 256,
-                        'instructions': VOICE_CONTEXT,
+                        'reasoning': {'effort': 'none'},
                         'input': [{'role': 'user', 'content': QUESTION}]}
                 results.append(await http_case(client, config['llm'], 'llm_responses_' + str(i + 1), body, endpoint='/responses'))
             return results
