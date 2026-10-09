@@ -64,7 +64,9 @@ WSS 地址根据 Region 自动生成，不读取 REST 的 `AZURE_SPEECH_ENDPOINT
 也可删除该环境变量，让官方插件根据 Region 自动生成合成端点。
 `LLM_API_STYLE=openai` 兼容原网关；DeepSeek 官方接口使用 `deepseek`、
 `LLM_BASE_URL=https://api.deepseek.com` 和 `LLM_MODEL=deepseek-flash`，
-显式关闭默认思考模式，并使用官方 `max_tokens` 参数。供应商 Key 仍只存后端。
+保留此前的关闭思考模式设置。Agent 不添加自定义回复风格提示词，也不发送
+`max_tokens` / `max_completion_tokens`，回复长度由模型和供应商默认值决定。
+供应商 Key 仍只存后端。
 默认一个预热进程、一次会话。`VOICE_ENDPOINT_DELAY`、`VOICE_PREEMPTIVE` 和 `VOICE_REVISION`
 在 `agent.env` 中设置；变更后只重启本项目的 Agent，避免并行测速干扰供应商限流。
 

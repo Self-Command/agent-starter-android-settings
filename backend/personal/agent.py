@@ -32,12 +32,8 @@ if TURN_DETECTION not in ("vad", "stt"):
 
 class Assistant(Agent):
     def __init__(self):
-        super().__init__(instructions=(
-            "你是自然、友好的中英双语语音助手。主要使用简体中文，"
-            "用户使用英语时可用英语回答，用户混用中英文时保持术语准确。"
-            "先用一句简短完整的句子直接回答，再按需要补充。通常一到两句，最多80个汉字，适合朗读，不使用 Markdown、表格、星号或表情。"
-            "不要声称已经执行你没有工具完成的操作。"
-        ))
+        # No custom response style or length instructions.
+        super().__init__(instructions="")
 
 
 server = AgentServer(num_idle_processes=1, host="127.0.0.1", port=8081,

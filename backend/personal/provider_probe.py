@@ -65,8 +65,7 @@ async def measure(client, provider, index, trace):
 async def main():
     llm = {'name': 'llm', 'url': os.environ['LLM_BASE_URL'].rstrip('/'), 'key': os.environ['LLM_API_KEY'],
            'body': {'model': os.environ['LLM_MODEL'], 'stream': True,
-                    'messages': [{'role': 'system', 'content': '你是中英双语语音助手。先用一句简短完整的句子直接回答，最多80个汉字。'},
-                                 {'role': 'user', 'content': '语音助手连接正常吗？Please reply briefly.'}]}}
+                    'messages': [{'role': 'user', 'content': '语音助手连接正常吗？'}]}}
     options = completion_options(os.getenv('LLM_API_STYLE', 'openai'))
     llm['body'].update(options.pop('extra_body', {}))
     llm['body'].update(options)
