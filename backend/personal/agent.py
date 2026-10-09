@@ -62,7 +62,7 @@ async def entrypoint(ctx: agents.JobContext):
             speech_region=os.environ["AZURE_SPEECH_REGION"],
             voice=os.getenv("AZURE_TTS_VOICE", "zh-CN-XiaoxiaoMultilingualNeural"),
             language=os.getenv("AZURE_TTS_LANGUAGE", "zh-CN"),
-            prosody=ProsodyConfig(rate=float(os.getenv("AZURE_TTS_RATE", "2.0"))),
+            prosody=ProsodyConfig(rate=float(os.getenv("AZURE_TTS_RATE", "1.5"))),
             sample_rate=24000,
         )
     else:
