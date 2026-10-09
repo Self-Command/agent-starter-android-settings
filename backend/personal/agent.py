@@ -8,6 +8,7 @@ from pathlib import Path
 from livekit import agents
 from livekit.agents import Agent, AgentServer, AgentSession, TurnHandlingOptions, room_io, tts, tokenize
 from livekit.plugins import azure, openai, silero
+from livekit.plugins.azure.tts import ProsodyConfig
 
 from bilingual_stt import BilingualDeepgramSTT
 from mimo_tts import MiMoTTS
@@ -61,6 +62,7 @@ async def entrypoint(ctx: agents.JobContext):
             speech_region=os.environ["AZURE_SPEECH_REGION"],
             voice=os.getenv("AZURE_TTS_VOICE", "zh-CN-XiaoxiaoMultilingualNeural"),
             language=os.getenv("AZURE_TTS_LANGUAGE", "zh-CN"),
+            prosody=ProsodyConfig(rate=float(os.getenv("AZURE_TTS_RATE", "1.2"))),
             sample_rate=24000,
         )
     else:
