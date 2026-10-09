@@ -39,7 +39,7 @@ class LLMRequestTest(unittest.IsolatedAsyncioTestCase):
     async def test_deepseek_wire_request_disables_thinking(self):
         body = await self.request_body("deepseek")
         self.assertEqual(body["thinking"], {"type": "disabled"})
-        self.assertEqual(body["max_tokens"], 256)
+        self.assertEqual(body["max_tokens"], 1024)
         self.assertNotIn("max_completion_tokens", body)
         self.assertNotIn("reasoning_effort", body)
         self.assertEqual(body["messages"][0], {"role": "system", "content": VOICE_INSTRUCTIONS})
@@ -47,7 +47,7 @@ class LLMRequestTest(unittest.IsolatedAsyncioTestCase):
     async def test_existing_gateway_request_stays_compatible(self):
         body = await self.request_body("openai")
         self.assertEqual(body["reasoning_effort"], "none")
-        self.assertEqual(body["max_completion_tokens"], 256)
+        self.assertEqual(body["max_completion_tokens"], 1024)
         self.assertNotIn("max_tokens", body)
         self.assertNotIn("thinking", body)
 
