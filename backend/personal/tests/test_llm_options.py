@@ -7,6 +7,7 @@ from livekit.plugins import openai as livekit_openai
 from livekit.agents.llm import ChatContext
 
 from llm_options import completion_options
+from voice_policy import VOICE_INSTRUCTIONS
 
 
 class LLMRequestTest(unittest.IsolatedAsyncioTestCase):
@@ -27,6 +28,7 @@ class LLMRequestTest(unittest.IsolatedAsyncioTestCase):
             # Inspect the actual LiveKit wire request, not a parallel SDK request.
             llm = livekit_openai.LLM(model="fictional", client=client, **options)
             context = ChatContext()
+            context.add_message(role="system", content=VOICE_INSTRUCTIONS)
             context.add_message(role="user", content="请详细回答。")
             async with llm.chat(chat_ctx=context) as stream:
                 content = "".join([chunk.delta.content or "" async for chunk in stream if chunk.delta])
@@ -37,14 +39,15 @@ class LLMRequestTest(unittest.IsolatedAsyncioTestCase):
     async def test_deepseek_wire_request_disables_thinking(self):
         body = await self.request_body("deepseek")
         self.assertEqual(body["thinking"], {"type": "disabled"})
-        self.assertNotIn("max_tokens", body)
+        self.assertEqual(body["max_tokens"], 256)
         self.assertNotIn("max_completion_tokens", body)
         self.assertNotIn("reasoning_effort", body)
+        self.assertEqual(body["messages"][0], {"role": "system", "content": VOICE_INSTRUCTIONS})
 
     async def test_existing_gateway_request_stays_compatible(self):
         body = await self.request_body("openai")
         self.assertEqual(body["reasoning_effort"], "none")
-        self.assertNotIn("max_completion_tokens", body)
+        self.assertEqual(body["max_completion_tokens"], 256)
         self.assertNotIn("max_tokens", body)
         self.assertNotIn("thinking", body)
 

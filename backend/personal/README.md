@@ -67,8 +67,11 @@ WSS 地址根据 Region 自动生成，不读取 REST 的 `AZURE_SPEECH_ENDPOINT
 也可删除该环境变量，让官方插件根据 Region 自动生成合成端点。
 `LLM_API_STYLE=openai` 兼容原网关；DeepSeek 官方接口使用 `deepseek`、
 `LLM_BASE_URL=https://api.deepseek.com` 和 `LLM_MODEL=deepseek-flash`，
-保留此前的关闭思考模式设置。Agent 不添加自定义回复风格提示词，也不发送
-`max_tokens` / `max_completion_tokens`，回复长度由模型和供应商默认值决定。
+保留此前的关闭思考模式设置。`voice_policy.py` 定义实时语音回复规则：
+每轮通常 1–3 个短句、中文约 60–100 字，提示模型每轮不超过 100 字符，
+简单问题可以更短，复杂内容分轮讲；用户说“继续”时接着讲下一部分。
+长度由模型主动组织，不在 App 或语音流里硬截文字。256 个输出 Token 作为
+异常长生成的兜底上限，不等于 100 字；提示词字数目标仍需实测模型遵循情况。
 供应商 Key 仍只存后端。
 文字输出使用 `TextOutputOptions(sync_transcription=False)`：LLM 生成后立即发送，
 不按 TTS 的估算语速逐字延迟显示。App 继续读取官方 `lk.transcription` 文本流，

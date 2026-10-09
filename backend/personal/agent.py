@@ -14,6 +14,7 @@ from bilingual_stt import BilingualDeepgramSTT
 from mimo_tts import MiMoTTS
 from llm_options import completion_options
 from azure_streaming_tts import AzureStreamingTTS
+from voice_policy import VOICE_INSTRUCTIONS
 
 for logger_name in ("httpx", "httpcore", "openai"):
     logging.getLogger(logger_name).setLevel(logging.WARNING)
@@ -33,8 +34,7 @@ if TURN_DETECTION not in ("vad", "stt"):
 
 class Assistant(Agent):
     def __init__(self):
-        # No custom response style or length instructions.
-        super().__init__(instructions="")
+        super().__init__(instructions=VOICE_INSTRUCTIONS)
 
 
 server = AgentServer(num_idle_processes=1, host="127.0.0.1", port=8081,
