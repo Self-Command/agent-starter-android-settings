@@ -9,8 +9,17 @@ on:
       turns:
         description: 'Number of consecutive conversational turns'
         type: choice
-        options: ['1', '3']
+        options: ['1', '3', '10']
         default: '3'
+      target:
+        description: Deployment to measure
+        type: choice
+        options: ['cloud', 'personal']
+        default: cloud
+      behavior:
+        description: Personal deployment interruption and reconnect checks
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -22,7 +31,7 @@ concurrency:
 jobs:
   requests-and-voice:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-java@v5
@@ -37,9 +46,17 @@ jobs:
           python-version: '3.11'
       - name: Test production App request selection and SDK HTTP requests on JVM
         env:
-          VOICE_TEST_CONFIG: ${{ secrets.ANDROID_VOICE_TEST_CONFIG }}
+          VOICE_TEST_CONFIG: ${{ secrets[inputs.target == 'personal' && 'PERSONAL_VOICE_TEST_CONFIG' || 'ANDROID_VOICE_TEST_CONFIG'] }}
           RESOLVED_CONNECTION_FILE: ${{ runner.temp }}/resolved-connection.json
         run: |
+          python - <<'PY'
+          import json, os
+          config = json.loads(os.environ['VOICE_TEST_CONFIG'])
+          for secret in (config.get('token_endpoint'), config.get('token'),
+                         config['tts']['api_key'], (config.get('llm') or {}).get('api_key')):
+              if secret:
+                  print('::add-mask::' + secret)
+          PY
           chmod +x gradlew
           ./gradlew :app:testDebugUnitTest --no-daemon
           test -s "$RUNNER_TEMP/resolved-connection.json"
@@ -47,11 +64,17 @@ jobs:
         run: python -m pip install 'livekit==1.1.20' 'aiohttp==3.13.3'
       - name: Measure provider streaming and complete conversation latency
         env:
-          VOICE_TEST_CONFIG: ${{ secrets.ANDROID_VOICE_TEST_CONFIG }}
+          VOICE_TEST_CONFIG: ${{ secrets[inputs.target == 'personal' && 'PERSONAL_VOICE_TEST_CONFIG' || 'ANDROID_VOICE_TEST_CONFIG'] }}
           RESOLVED_CONNECTION_FILE: ${{ runner.temp }}/resolved-connection.json
           VOICE_TEST_TURNS: ${{ inputs.turns }}
           VOICE_TEST_LABEL: ${{ inputs.label }}
-        run: python .github/scripts/request-voice-test.py
+          VOICE_TEST_BEHAVIOR: ${{ inputs.behavior }}
+        run: |
+          if [ '${{ inputs.target }}' = personal ]; then
+            python .github/scripts/personal-voice-test.py
+          else
+            python .github/scripts/request-voice-test.py
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -64,4 +87,4 @@ jobs:
           retention-days: 14
       - name: Remove temporary connection credentials
         if: always()
-        run: rm -f "$RUNNER_TEMP/resolved-connection.json"
+        run: rm -f "$RUNNER_TEMP/resolved-connection.json" "$RUNNER_TEMP/chinese.wav" "$RUNNER_TEMP/english.wav" "$RUNNER_TEMP/interrupt.wav" "$RUNNER_TEMP/long-question.wav" "$RUNNER_TEMP/mixed-with-pause.wav"

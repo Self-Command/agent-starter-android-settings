@@ -1,0 +1,50 @@
+limit_req_zone $binary_remote_addr zone=personal_token:1m rate=6r/m;
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name live.spacedo.org;
+    access_log off;
+    error_log /dev/null;
+    location ^~ /.well-known/acme-challenge/ {
+        root /opt/livekit-personal/acme;
+    }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name live.spacedo.org;
+    ssl_certificate /etc/letsencrypt/live/live.spacedo.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/live.spacedo.org/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    # All signalling URLs can contain a JWT; do not log URLs on this host.
+    access_log off;
+    error_log /dev/null;
+    client_max_body_size 4k;
+
+    location ^~ /token/ {
+        limit_req zone=personal_token burst=3 nodelay;
+        limit_req_status 429;
+        proxy_pass http://127.0.0.1:8082;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 10s;
+        add_header Cache-Control no-store always;
+    }
+    location = /health {
+        proxy_pass http://127.0.0.1:8082/health;
+    }
+    location / {
+        proxy_pass http://127.0.0.1:7880;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_buffering off;
+    }
+}

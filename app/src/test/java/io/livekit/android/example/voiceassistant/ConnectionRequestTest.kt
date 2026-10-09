@@ -92,7 +92,7 @@ class ConnectionRequestTest {
         val start = System.nanoTime()
         val response = when (val source = settings.createTokenSource()) {
             is FixedTokenSource -> source.fetch().getOrThrow()
-            is ConfigurableTokenSource -> source.fetch().getOrThrow()
+            is ConfigurableTokenSource -> source.fetch(TokenRequestOptions(participantIdentity = "action-client")).getOrThrow()
             else -> error("Unsupported SDK TokenSource")
         }
         // Secrets go only into the runner's private temporary file, never test output/artifacts.

@@ -9,7 +9,7 @@ App 的连接选择抽象在 `LiveKitConnectionRequest.kt`。JVM 测试调用生
 解析出的真实连接地址和 JWT 仅写入 runner 临时目录，随后删除，不进入报告。
 
 接着 Python RTC 客户端使用这些连接信息，发布固定的虚构中英文合成语音，测量
-实时转写、最终转写、首段回复音频和完整回复。连续 1 或 3 轮；输入按 20ms 节奏发送，
+实时转写、最终转写、首段回复音频和完整回复。连续 1、3 或 10 轮；输入按 20ms 节奏发送，
 报告时钟滞后；使用 WAV 中最后一个有效声音样本作为说完的时点。
 这部分复用连接配置和相同 LiveKit 服务链路，但不执行 Android 的麦克风、WebRTC
 原生库、扬声器或页面，不能当作手机端或真人说话的验证。
@@ -29,3 +29,10 @@ WAV、流式 PCM16、短句和两次并发。先预热再交替比较，相同�
 可选 `mode` 为三种 App 连接方式之一，配合 `token_server_id` 或 `token_endpoint`。
 模型信息仅供诊断对照，App 本身仍不调用或配置 STT/LLM/TTS。
 日志和 artifacts 不包含凭据，转写只来自已公开的虚构测试音频。
+
+选择 `target=personal` 时使用独立的 `PERSONAL_VOICE_TEST_CONFIG` Secret：
+`mode=TOKEN_ENDPOINT`、`token_endpoint` 和 `tts`。不覆盖已有 Cloud 凭据。
+自托管测试使用中文、英文、中英混说和插入 250ms 停顿的合成语音，
+可选择追加打断及重新获取 Token 后的重连检查。
+它不执行额外 LLM HTTP 对照，以免这些请求与通话争抢供应商配额。
+ICE 统计仅导出实际选中的协议、候选类型、RTT、丢包和抖动，省略地址和认证信息。

@@ -40,6 +40,9 @@ Token 默认隐藏，不通过导航或日志传递。取消编辑保留原配�
 Token 请求代码，再用合成语音测服务链路，未达实时指标会失败并保留报告。
 详见 [.github/test-audio/APP-VOICE-TEST.md](.github/test-audio/APP-VOICE-TEST.md)。
 
+单人自托管后端和 UDP 部署说明见 [backend/personal/README.md](backend/personal/README.md)。
+自托管仍使用现有 APK 的「Token 接口」设置，不增加前端模型配置。
+
 ## 固定签名
 
 签名密钥通过 **Initialize signing key** 工作流生成一次，明文仅存在于云端临时目录。

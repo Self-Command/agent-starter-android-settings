@@ -21,3 +21,4 @@ vcs.xml
 *.jks
 *.keystore
 **/build/
+/backend/personal/private/
