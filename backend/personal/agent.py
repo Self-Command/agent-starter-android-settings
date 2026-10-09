@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from livekit import agents
-from livekit.agents import Agent, AgentServer, AgentSession, TurnHandlingOptions, tts, tokenize
+from livekit.agents import Agent, AgentServer, AgentSession, TurnHandlingOptions, room_io, tts, tokenize
 from livekit.plugins import azure, openai, silero
 
 from bilingual_stt import BilingualDeepgramSTT
@@ -124,7 +124,15 @@ async def entrypoint(ctx: agents.JobContext):
         metric_tasks.add(task)
         task.add_done_callback(metric_tasks.discard)
 
-    await session.start(room=ctx.room, agent=Assistant(), record=False)
+    # Forward generated text immediately instead of pacing it to TTS playback.
+    await session.start(
+        room=ctx.room,
+        agent=Assistant(),
+        room_options=room_io.RoomOptions(
+            text_output=room_io.TextOutputOptions(sync_transcription=False),
+        ),
+        record=False,
+    )
     await session.say("你好，请讲。")
 
 

@@ -67,6 +67,9 @@ WSS 地址根据 Region 自动生成，不读取 REST 的 `AZURE_SPEECH_ENDPOINT
 保留此前的关闭思考模式设置。Agent 不添加自定义回复风格提示词，也不发送
 `max_tokens` / `max_completion_tokens`，回复长度由模型和供应商默认值决定。
 供应商 Key 仍只存后端。
+文字输出使用 `TextOutputOptions(sync_transcription=False)`：LLM 生成后立即发送，
+不按 TTS 的估算语速逐字延迟显示。App 继续读取官方 `lk.transcription` 文本流，
+无需更换 APK。文字可能先于语音展示；打断时已经显示的文字不代表全部已朗读。
 默认一个预热进程、一次会话。`VOICE_ENDPOINT_DELAY`、`VOICE_PREEMPTIVE` 和 `VOICE_REVISION`
 在 `agent.env` 中设置；变更后只重启本项目的 Agent，避免并行测速干扰供应商限流。
 
